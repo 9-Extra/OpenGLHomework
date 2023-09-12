@@ -1,3 +1,4 @@
 /bin/homework*
 /.cache
 /build
+/.vscode
