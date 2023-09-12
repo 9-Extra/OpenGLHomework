@@ -1,6 +1,5 @@
 #pragma once
 #include <gl/glew.h>
-#include <GL/glut.h>
 #include <cstdio>
 #include <chrono>
 #include <assert.h>
@@ -298,6 +297,19 @@ public:
     }
     
 };
+
+inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z,
+                                  float far_z) {
+    float SinFov = std::sin(fov * 0.5f);
+    float CosFov = std::cos(fov * 0.5f);
+
+    float Height = CosFov / SinFov;
+    float Width = Height / ratio;
+
+    return Matrix{{Width, 0.0f, 0.0f, 0.0f, 0.0f, Height, 0.0f, 0.0f, 0.0f,
+                   0.0f, -far_z / (far_z - near_z), -1.0f, 0.0f, 0.0f,
+                   -far_z * near_z / (far_z - near_z), 0.0f}};
+}
 
 class Scene
 {

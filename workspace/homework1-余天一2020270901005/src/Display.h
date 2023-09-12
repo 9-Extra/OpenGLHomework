@@ -107,7 +107,7 @@ public:
             exit(-1);
         }
 
-        // make it the calling thread's current rendering context
+        //make it the calling thread's current rendering context
         if (!wglMakeCurrent(hdc, hglrc)){
             exit(-1);
         }
