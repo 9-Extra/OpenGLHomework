@@ -1,6 +1,9 @@
 #include "YGraphics.h"
+#include "Display.h"
+#include "InputHandler.h"
 #include <memory>
 #include <sstream>
+#include <iostream>
 
 struct GlobalRuntime {
     bool mouse_left_pressed = false, mouse_right_pressed = false;
@@ -8,11 +11,70 @@ struct GlobalRuntime {
 
     bool render_frame = false;
 
+    uint32_t window_width;
+    uint32_t window_height;
+
     Scene scene;
     Clock clock;
+    Display display;
+    InputHandler input;
+
+    GlobalRuntime(uint32_t width = 1080, uint32_t height = 720): window_width(width), window_height(height), display(width, height) {}
 };
 
 std::unique_ptr<GlobalRuntime> runtime;
+
+LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    switch (Msg) {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_MOUSEMOVE: {
+        float xPos = (float)LOWORD(lParam) / (float)runtime->window_width;
+        float yPos = (float)HIWORD(lParam) / (float)runtime->window_height;
+        // debug_log("Mouse: %f ,%f\n", xPos, yPos);
+        bool l_button = wParam & MK_LBUTTON;
+        bool r_button = wParam & MK_RBUTTON;
+        runtime->input.handle_mouse_move(xPos, yPos, l_button, r_button);
+        return 0;
+    }
+
+    case WM_KEYDOWN: {
+        runtime->input.key_down(wParam);
+        return 0;
+    }
+
+    case WM_KEYUP: {
+        runtime->input.key_up(wParam);
+        return 0;
+    }
+
+    case WM_KILLFOCUS: {
+        runtime->input.clear_keyboard_state();
+        runtime->input.clear_mouse_state();
+        break;
+    }
+
+    case WM_CLOSE: {
+        DestroyWindow(hWnd);
+        break;
+    }
+    case WM_DESTROY: {
+        PostQuitMessage(0);
+        break;
+    }
+
+    case WM_SIZE: {
+        runtime->window_width = LOWORD(lParam);
+        runtime->window_height = HIWORD(lParam);
+    }
+
+    default:
+        return DefWindowProcW(hWnd, Msg, wParam, lParam);
+    }
+    return true;
+}
 
 const std::vector<Vertex> cube_vertices = {
     {{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}}, {{1.0, -1.0, -1.0}, {1.0, 0.0, 0.0}},
@@ -44,10 +106,10 @@ void init(void) {
     platform.position = {0.0, -2.0, -10.0};
     runtime->scene.objects.emplace_back(std::move(platform));
 
-    glClearColor(0.0, 0.0, 0.0, 0.0);
-    // glShadeModel(GL_FLAT);
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
+    // glClearColor(0.0, 0.0, 0.0, 0.0);
+    // // glShadeModel(GL_FLAT);
+    // glEnable(GL_DEPTH_TEST);
+    // glDepthFunc(GL_LESS);
 }
 
 Matrix compute_perspective_matrix(float ratio, float fov, float near_z,
@@ -58,21 +120,19 @@ Matrix compute_perspective_matrix(float ratio, float fov, float near_z,
     float Height = CosFov / SinFov;
     float Width = Height / ratio;
 
-    return Matrix{{
-        Width, 0.0f, 0.0f, 0.0f,
-        0.0f, Height, 0.0f, 0.0f,
-        0.0f, 0.0f, -far_z / (far_z - near_z), -1.0f,
-        0.0f, 0.0f, -far_z * near_z / (far_z - near_z), 0.0f
-    }};
+    return Matrix{{Width, 0.0f, 0.0f, 0.0f, 0.0f, Height, 0.0f, 0.0f, 0.0f,
+                   0.0f, -far_z / (far_z - near_z), -1.0f, 0.0f, 0.0f,
+                   -far_z * near_z / (far_z - near_z), 0.0f}};
 }
 
 void myReshape(GLsizei w, GLsizei h) {
     glViewport(0, 0, w, h);
     glMatrixMode(GL_PROJECTION);
-    glLoadMatrixf(
-        compute_perspective_matrix(float(w) / float(h), 90.0f / 180.0f * 3.14f, 1.0f, 1000.0f)
-            .transpose()
-            .data());
+    glLoadMatrixf(compute_perspective_matrix(float(w) / float(h),
+                                             90.0f / 180.0f * 3.14f, 1.0f,
+                                             1000.0f)
+                      .transpose()
+                      .data());
     // gluPerspective(90.0f, double(w) / double(h), 1.0, 1000.0);
 }
 
@@ -219,23 +279,43 @@ void keyPress(int key, int x, int y) {
 }
 
 int main(int argc, char **argv) {
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
-    glutInitWindowPosition(50, 100);
-    glutInitWindowSize(400, 300);
-    glutCreateWindow("DrawCube");
+    // glutInit(&argc, argv);
+    // glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    // glutInitWindowPosition(50, 100);
+    // glutInitWindowSize(400, 300);
+    // glutCreateWindow("DrawCube");
 
-    glutMouseFunc(mouseClick);
-    glutMotionFunc(mouseDrag);
-    glutKeyboardFunc(keyPressShort);
-    glutSpecialFunc(keyPress);
+    // glutMouseFunc(mouseClick);
+    // glutMotionFunc(mouseDrag);
+    // glutKeyboardFunc(keyPressShort);
+    // glutSpecialFunc(keyPress);
 
-    glutReshapeFunc(myReshape);
+    // glutReshapeFunc(myReshape);
 
     init();
 
-    glutDisplayFunc(renderScene);
+    runtime->display.show();
+    
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (err != GLEW_OK){
+        std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
+    }
 
     runtime->clock.update();
-    glutMainLoop();
+    while(!runtime->display.poll_events()){
+        float delta = runtime->clock.update();
+
+
+
+        std::wstringstream formatter;
+        formatter << L"FPS: " << calculate_fps(delta);
+        runtime->display.set_title(formatter.str().c_str());
+        runtime->display.swap();
+    }
+
+    // glutDisplayFunc(renderScene);
+
+    // runtime->clock.update();
+    // glutMainLoop();
 }

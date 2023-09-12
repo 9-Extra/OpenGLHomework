@@ -1,4 +1,5 @@
 #pragma once
+#include <gl/glew.h>
 #include <GL/glut.h>
 #include <cstdio>
 #include <chrono>
