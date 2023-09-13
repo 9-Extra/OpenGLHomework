@@ -36,15 +36,31 @@ struct GlobalRuntime {
 
 std::unique_ptr<GlobalRuntime> runtime;
 
-void myReshape(GLsizei w, GLsizei h) {
+void handle_reshape(GLsizei w, GLsizei h) {
     glViewport(0, 0, w, h);
-    glMatrixMode(GL_PROJECTION);
-    glLoadMatrixf(compute_perspective_matrix(float(w) / float(h),
-                                             90.0f / 180.0f * 3.14f, 1.0f,
-                                             1000.0f)
-                      .transpose()
-                      .data());
     // gluPerspective(90.0f, double(w) / double(h), 1.0, 1000.0);
+}
+
+// 右键菜单
+void handle_context_menu(HWND hWnd, LPARAM lParam)
+{
+    HMENU hPopup = CreatePopupMenu();
+    static int flag = 0;
+
+    AppendMenu(hPopup, MF_STRING | (flag ? MF_CHECKED : 0), 1001, "选择");
+    AppendMenu(hPopup, MF_SEPARATOR, 0, "");
+    AppendMenu(hPopup, MF_STRING, 1002, "右键2");
+
+    switch(TrackPopupMenu(hPopup, TPM_RETURNCMD, LOWORD(lParam), HIWORD(lParam), 0, hWnd, NULL))
+    {
+    case 1001:
+        flag = !flag;
+        break;
+    case 1002:
+        MessageBox(hWnd, "右键2", "信息", MB_OK);
+        break;
+
+    }
 }
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
@@ -60,7 +76,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
         bool l_button = wParam & MK_LBUTTON;
         bool r_button = wParam & MK_RBUTTON;
         runtime->input.handle_mouse_move(xPos, yPos, l_button, r_button);
-        return 0;
+        break;
     }
 
     case WM_KEYDOWN: {
@@ -80,6 +96,11 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
         ;
     }
 
+    case WM_CONTEXTMENU:{
+        handle_context_menu(hWnd, lParam);
+        return 0;
+    }
+
     case WM_CLOSE: {
         DestroyWindow(hWnd);
         break;
@@ -92,7 +113,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     case WM_SIZE: {
         runtime->window_width = LOWORD(lParam);
         runtime->window_height = HIWORD(lParam);
-        myReshape(LOWORD(lParam), HIWORD(lParam));
+        handle_reshape(LOWORD(lParam), HIWORD(lParam));
         break;
     }
 
@@ -149,30 +170,6 @@ void handle_mouse() {
     }
 }
 
-// void mouseClick(int button, int stat, int x, int y) {
-//     if (stat == GLUT_DOWN) {
-//         runtime->mouse_last_x = x;
-//         runtime->mouse_last_y = y;
-//     }
-
-//     if (button == GLUT_LEFT_BUTTON) {
-//         if (stat == GLUT_DOWN) {
-//             runtime->mouse_left_pressed = true;
-//         }
-//         if (stat == GLUT_UP) {
-//             runtime->mouse_left_pressed = false;
-//         }
-//     }
-//     if (button == GLUT_RIGHT_BUTTON) {
-//         if (stat == GLUT_DOWN) {
-//             runtime->mouse_right_pressed = true;
-//         }
-//         if (stat == GLUT_UP) {
-//             runtime->mouse_right_pressed = false;
-//         }
-//     }
-// }
-
 void handle_keyboard(float delta) {
     Scene &scene = runtime->scene;
     const float move_speed = 0.01f * delta;
@@ -227,7 +224,8 @@ void tick(float delta) {
 void render_frame() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    runtime->scene.update();
+    runtime->scene.camera.update(float(runtime->window_width) / float(runtime->window_height));
+
     if (!runtime->render_frame) {
         runtime->scene.draw_polygon();
     } else {
@@ -260,4 +258,7 @@ int main(int argc, char **argv) {
         runtime->display.set_title(formatter.str().c_str());
         runtime->display.swap();
     }
+
+    std::cout << "Normal exit!\n"; 
+    return 0;
 }

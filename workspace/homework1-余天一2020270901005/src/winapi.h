@@ -2,8 +2,8 @@
 
 #define NOGDICAPMASKS
 #define NOSYSMETRICS
-#define NOMENUS
-#define NOICONS
+//#define NOMENUS
+//#define NOICONS
 //#define NOKEYSTATES
 #define NOSYSCOMMANDS
 #define NORASTEROPS

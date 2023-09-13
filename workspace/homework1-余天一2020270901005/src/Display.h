@@ -41,7 +41,7 @@ public:
                                           .cbClsExtra = 0,
                                           .cbWndExtra = 0,
                                           .hInstance = hInstance,
-                                          .hIcon = NULL,
+                                          .hIcon = LoadIcon(NULL, IDI_WINLOGO),
                                           .hCursor =
                                               LoadCursor(NULL, IDC_ARROW),
                                           .hbrBackground = NULL,
@@ -106,8 +106,8 @@ private:
             0,
             0,
             0,              // accum bits ignored
-            32,             // 32-bit z-buffer
-            0,              // no stencil buffer
+            24,             // 32-bit z-buffer
+            8,              // no stencil buffer
             0,              // no auxiliary buffer
             PFD_MAIN_PLANE, // main layer
             0,              // reserved
