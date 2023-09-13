@@ -64,6 +64,156 @@ struct Vector2f {
 	}
 };
 
+struct Color
+{
+    float r, g, b;
+
+    inline const float *data() const
+    {
+        return (float *)this;
+    }
+
+    inline bool operator==(const Color &ps)
+    {
+        return r == ps.r && g == ps.g && b == ps.b;
+    }
+
+    inline bool operator!=(const Color &ps)
+    {
+        return !(*this == ps);
+    }
+};
+
+struct Vector3f{
+    union{
+        struct
+        {
+            float x,y,z;
+        };
+        float v[3];
+    };
+
+    const float *data() const
+    {
+        return (float *)v;
+    }
+
+    inline float operator [](const unsigned int i) const{
+        return v[i];
+    }
+
+    inline Vector3f operator +(const Vector3f b) const{
+        return Vector3f{x + b.x,y + b.y,z + b.z};
+    }
+
+    inline Vector3f operator+=(const Vector3f b){
+        return *this = *this + b;
+    }
+
+    inline Vector3f operator*(const float n){
+        return {x * n,y * n,z * n};
+    }
+
+    inline float dot(const Vector3f b){
+        return x * b.x + y * b.y + z * b.z;
+    }
+
+    inline Vector3f cross(const Vector3f b){
+        return {this->y * b.z - this->z * b.y,this->x * b.z - this->z * b.y,this->x * b.y - this->y * b.x};
+    }
+
+    inline float square(){
+        return this->dot(*this);
+    }
+
+    inline Vector3f normalize(){
+        float inv_sqrt = Q_rsqrt(this->square());
+        return *this * inv_sqrt;
+    }
+};
+
+struct Matrix
+{
+    float m[4][4];
+
+    float *data()
+    {
+        return (float *)m;
+    }
+
+    inline Matrix transpose(){
+        Matrix r;
+        for(unsigned int i = 0;i < 4;i++){
+            for(unsigned int j = 0;j < 4;j++){
+                r.m[i][j] = this->m[j][i];
+            }
+        }
+        return r;
+    }
+
+    inline static Matrix identity()
+    {
+        Matrix m{
+            {
+                {1.0, 0.0, 0.0, 0.0},
+                {0.0, 1.0, 0.0, 0.0},
+                {0.0, 0.0, 1.0, 0.0},
+                {0.0, 0.0, 0.0, 1.0},
+            }};
+
+        return m;
+    }
+
+    inline Matrix operator*(const Matrix &m)
+    {
+        Matrix r;
+        for (unsigned int i = 0; i < 4; i++)
+        {
+            for (unsigned int j = 0; j < 4; j++)
+            {
+                r.m[i][j] = this->m[i][0] * m.m[0][j] + this->m[i][1] * m.m[1][j] + this->m[i][2] * m.m[2][j] + this->m[i][3] * m.m[3][j];
+            }
+        }
+        return r;
+    }
+    //沿z轴顺时针旋转roll，沿x轴顺时针旋转pitch，沿y轴顺时针旋转yaw
+    inline static Matrix rotate(float roll, float pitch, float yaw)
+    {
+        float s_p = sin(pitch), c_p = cos(pitch);
+        float s_r = sin(roll), c_r = cos(roll);
+        float s_y = sin(yaw), c_y = cos(yaw);
+        Matrix m{
+            {{-s_p * s_r * s_y + c_r * c_y, -s_p * s_y * c_r - s_r * c_y, -s_y * c_p, 0.0},
+             {s_r * c_p, c_p * c_r, -s_p, 0.0},
+             {s_p * s_r * c_y + s_y * c_r, s_p * c_r * c_y - s_r * s_y, c_p * c_y, 0.0},
+             {0.0, 0.0, 0.0, 1.0}}};
+        return m;
+    }
+
+    inline static Matrix translate(float x, float y, float z)
+    {
+        Matrix m{{
+            {1.0, 0.0, 0.0, x},
+            {0.0, 1.0, 0.0, y},
+            {0.0, 0.0, 1.0, z},
+            {0.0, 0.0, 0.0, 1.0},
+        }};
+        return m;
+    }
+
+    inline static Matrix scale(float x,float y,float z){
+        Matrix m{
+            {
+                {x, 0.0, 0.0, 0.0},
+                {0.0, y, 0.0, 0.0},
+                {0.0, 0.0, z, 0.0},
+                {0.0, 0.0, 0.0, 1.0},
+            }};
+
+        return m;
+    }
+};
+
 // struct Quaternion {
 // 	float x, y, z, w;
 

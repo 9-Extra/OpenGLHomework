@@ -7,12 +7,7 @@
 #include <sstream>
 
 struct GlobalRuntime {
-    bool mouse_left_pressed = false, mouse_right_pressed = false;
-    int mouse_last_x, mouse_last_y;
-
     bool render_frame = false;
-
-    bool should_exit = false;
 
     uint32_t window_width;
     uint32_t window_height;
@@ -36,7 +31,7 @@ struct GlobalRuntime {
         scene.objects.emplace_back(std::move(platform));
     }
 
-    void exit() { should_exit = true; }
+    void exit() { PostQuitMessage(0); }
 };
 
 std::unique_ptr<GlobalRuntime> runtime;
@@ -59,8 +54,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     case WM_RBUTTONDOWN:
     case WM_RBUTTONUP:
     case WM_MOUSEMOVE: {
-        float xPos = (float)LOWORD(lParam) / (float)runtime->window_width;
-        float yPos = (float)HIWORD(lParam) / (float)runtime->window_height;
+        float xPos = (float)LOWORD(lParam);
+        float yPos = (float)HIWORD(lParam);
         // debug_log("Mouse: %f ,%f\n", xPos, yPos);
         bool l_button = wParam & MK_LBUTTON;
         bool r_button = wParam & MK_RBUTTON;
@@ -82,6 +77,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
         runtime->input.clear_keyboard_state();
         runtime->input.clear_mouse_state();
         break;
+        ;
     }
 
     case WM_CLOSE: {
@@ -97,38 +93,57 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
         runtime->window_width = LOWORD(lParam);
         runtime->window_height = HIWORD(lParam);
         myReshape(LOWORD(lParam), HIWORD(lParam));
+        break;
     }
 
     default:
-        return DefWindowProcW(hWnd, Msg, wParam, lParam);
+        break;
     }
     return DefWindowProcW(hWnd, Msg, wParam, lParam);
 }
 
-void init(void) {
+void opengl_init(void) {
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (err != GLEW_OK) {
+        std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
+    }
+
+    if (!GLEW_ARB_compatibility){
+        std::cerr << "系统不支持旧的API" << std::endl;
+        exit(-1);
+    }
+    const char *vendorName =
+        reinterpret_cast<const char *>(glGetString(GL_VENDOR));
+    const char *version =
+        reinterpret_cast<const char *>(glGetString(GL_VERSION));
+    std::cout << vendorName << ": " << version << std::endl;
+
     glClearColor(0.0, 0.0, 0.0, 0.0);
     // glShadeModel(GL_FLAT);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
+
+    checkError();
 }
 
 // 只在鼠标按下时启用
-void mouseDrag(int x, int y) {
+void handle_mouse() {
     // 左上角为(0,0)，右下角为(w,h)
+    InputHandler &input = runtime->input;
+    // 处理拖拽
 
-    float dx = x - runtime->mouse_last_x, dy = y - runtime->mouse_last_y;
-    runtime->mouse_last_x = x;
-    runtime->mouse_last_y = y;
-
-    if (runtime->mouse_left_pressed) {
+    if (input.is_left_button_down()) {
+        auto [dx, dy] = input.get_mouse_move().v;
         // 旋转图形
-        const float s = 0.03;
+        const float s = 0.003f;
         runtime->scene.objects[0].rotation += {0.0, dy * s, -dx * s};
     }
 
-    if (runtime->mouse_right_pressed) {
+    if (input.is_right_button_down()) {
+        auto [dx, dy] = input.get_mouse_move().v;
         // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
-        const float rotate_speed = 0.01;
+        const float rotate_speed = 0.003f;
         runtime->scene.camera.rotation.z += dx * rotate_speed;
         runtime->scene.camera.rotation.y -= dy * rotate_speed;
     }
@@ -158,48 +173,55 @@ void mouseDrag(int x, int y) {
 //     }
 // }
 
-void tick(float delta) {
+void handle_keyboard(float delta) {
     Scene &scene = runtime->scene;
     const float move_speed = 0.01f * delta;
 
-    InputHandler& input = runtime->input;
-    if (input.is_keydown(VK_ESCAPE)){
+    InputHandler &input = runtime->input;
+    if (input.is_keydown(VK_ESCAPE)) {
         runtime->exit();
     }
-    if (input.is_keydown('W')){
+    if (input.is_keydown('W')) {
         Vector3f ori = scene.camera.get_orientation();
         ori.y = 0.0;
         scene.camera.position += ori.normalize() * move_speed;
     }
-    if (input.is_keydown('S')){
+    if (input.is_keydown('S')) {
         Vector3f ori = scene.camera.get_orientation();
         ori.y = 0.0;
         scene.camera.position += ori.normalize() * -move_speed;
     }
-    if (input.is_keydown('A')){
+    if (input.is_keydown('A')) {
         Vector3f ori = scene.camera.get_orientation();
         ori = {ori.z, 0.0, -ori.x};
         scene.camera.position += ori.normalize() * move_speed;
     }
-    if (input.is_keydown('D')){
+    if (input.is_keydown('D')) {
         Vector3f ori = scene.camera.get_orientation();
         ori = {ori.z, 0.0, -ori.x};
         scene.camera.position += ori.normalize() * -move_speed;
     }
-    if (input.is_keydown(VK_SPACE)){
+    if (input.is_keydown(VK_SPACE)) {
         scene.camera.position.y += move_speed;
     }
-    if (input.is_keydown(VK_SHIFT)){
+    if (input.is_keydown(VK_SHIFT)) {
         scene.camera.position.y -= move_speed;
     }
-    if (input.is_keydown('1')){
+    if (input.is_keydown('1')) {
         runtime->render_frame = !runtime->render_frame;
     }
-    if (input.is_keydown('0')){
+    if (input.is_keydown('0')) {
         scene.camera.position = {0.0, 0.0, 0.0};
         scene.camera.rotation = {0.0, 0.0, 0.0};
         scene.objects[0].rotation = {0.0, 0.0, 0.0};
     }
+}
+
+void tick(float delta) {
+    handle_mouse();
+    handle_keyboard(delta);
+
+    runtime->input.clear_mouse_move();
 }
 
 void render_frame() {
@@ -222,27 +244,12 @@ void render_frame() {
 
 int main(int argc, char **argv) {
     runtime = std::make_unique<GlobalRuntime>();
+    runtime->display.show(); // 必须在runtime初始化完成后再执行
 
-    runtime->display.show();
-
-    glewExperimental = GL_TRUE;
-    GLenum err = glewInit();
-    if (err != GLEW_OK) {
-        std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
-    }
-
-    std::cout << (GLEW_ARB_compatibility ? "True" : "False") << std::endl;
-    const char *vendorName =
-        reinterpret_cast<const char *>(glGetString(GL_VENDOR));
-    const char *version =
-        reinterpret_cast<const char *>(glGetString(GL_VERSION));
-    std::cout << vendorName << ": " << version << std::endl;
-
-    init();
-    checkError();
+    opengl_init();
 
     runtime->clock.update();
-    while (!runtime->display.poll_events() && !runtime->should_exit) {
+    while (!runtime->display.poll_events()) {
         float delta = runtime->clock.update();
 
         tick(delta);

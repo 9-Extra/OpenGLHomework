@@ -25,8 +25,8 @@ public:
         }
     }
 
-    void swap(){
-        if (!wglSwapLayerBuffers(hdc, WGL_SWAP_MAIN_PLANE)){
+    void swap() {
+        if (!wglSwapLayerBuffers(hdc, WGL_SWAP_MAIN_PLANE)) {
             std::cerr << "交换前后缓冲失败\n";
             exit(-1);
         }
@@ -42,7 +42,8 @@ public:
                                           .cbWndExtra = 0,
                                           .hInstance = hInstance,
                                           .hIcon = NULL,
-                                          .hCursor = NULL,
+                                          .hCursor =
+                                              LoadCursor(NULL, IDC_ARROW),
                                           .hbrBackground = NULL,
                                           .lpszMenuName = NULL,
                                           .lpszClassName = L"MyWindow",
@@ -63,6 +64,25 @@ public:
             assert(false);
         }
 
+        bind_opengl_context();
+    }
+    ~Display() {
+        wglMakeCurrent(NULL, NULL);
+
+        // delete the rendering context
+        wglDeleteContext(hglrc);
+    }
+
+private:
+    static const DWORD WINDOW_STYLE =
+        WS_CAPTION | WS_SYSMENU | WS_OVERLAPPEDWINDOW;
+
+    HDC hdc;
+    HWND hwnd;
+    HGLRC hglrc;
+
+    friend void opengl_init(void);
+    void bind_opengl_context() {
         hdc = GetDC(hwnd);
 
         PIXELFORMATDESCRIPTOR pfd = {
@@ -103,26 +123,13 @@ public:
 
         // create a rendering context
         hglrc = wglCreateContext(hdc);
-        if (hglrc == NULL){
+        if (hglrc == NULL) {
             exit(-1);
         }
 
-        //make it the calling thread's current rendering context
-        if (!wglMakeCurrent(hdc, hglrc)){
+        // make it the calling thread's current rendering context
+        if (!wglMakeCurrent(hdc, hglrc)) {
             exit(-1);
         }
     }
-    ~Display() {
-        wglMakeCurrent(NULL, NULL);
-
-        // delete the rendering context
-        wglDeleteContext(hglrc);
-    }
-private:
-    static const DWORD WINDOW_STYLE =
-        WS_CAPTION | WS_SYSMENU | WS_OVERLAPPEDWINDOW;
-
-    HDC hdc;
-    HWND hwnd;
-    HGLRC hglrc;
 };
