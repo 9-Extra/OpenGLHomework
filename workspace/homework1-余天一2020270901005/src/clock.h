@@ -16,4 +16,8 @@ public:
         now = std::chrono::steady_clock::now();
         return delta;
     }
+    float get_current_delta() const{
+        using namespace std::chrono;
+        return duration_cast<duration<float, std::milli>>(steady_clock::now() - now).count();
+    }
 };

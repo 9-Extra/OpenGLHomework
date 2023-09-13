@@ -1,12 +1,13 @@
 #include "Display.h"
 #include "InputHandler.h"
 #include "YGraphics.h"
+#include "clock.h"
 #include "models.h"
+#include "render.h"
 #include <iostream>
 #include <memory>
 #include <sstream>
-#include "clock.h"
-#include "render.h"
+
 
 class GlobalRuntime {
 public:
@@ -14,17 +15,19 @@ public:
 
     bool the_world_enable = false;
 
+    DWORD main_thread_id;
     uint32_t window_width;
     uint32_t window_height;
 
     Scene scene;
-    Clock clock;
+    Clock logic_clock, render_clock;
     Display display;
     InputHandler input;
     Renderer renderer;
 
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
-        : window_width(width), window_height(height), display(width, height) {
+        : main_thread_id(GetCurrentThreadId()), window_width(width),
+          window_height(height), display(width, height) {
         GraphicsObject cube =
             GraphicsObject(std::move(cube_vertices), std::move(cube_indices));
         cube.position = {0.0, 0.0, -10.0};
@@ -39,32 +42,23 @@ public:
         renderer.start_thread();
     }
 
-    void exit() { PostQuitMessage(0); }
-
-    void the_world(){
-        the_world_enable = true;
-    }
-    void continue_run(){
+    void the_world() { the_world_enable = true; }
+    void continue_run() {
         the_world_enable = false;
-        clock.update();//skip time
+        logic_clock.update(); // skip time
         input.clear_keyboard_state();
     }
 
-    void terminal(){
+    void terminal() {
+        // 通知渲染线程退出，但是继续执行，直到渲染线程在退出时通知主线程结束消息循环
         renderer.terminal_thread();
     }
 };
 
 std::unique_ptr<GlobalRuntime> runtime;
 
-void handle_reshape(GLsizei w, GLsizei h) {
-    glViewport(0, 0, w, h);
-    // gluPerspective(90.0f, double(w) / double(h), 1.0, 1000.0);
-}
-
 // 右键菜单
-void handle_context_menu(HWND hWnd, LPARAM lParam)
-{
+void handle_context_menu(HWND hWnd, LPARAM lParam) {
     HMENU hPopup = CreatePopupMenu();
     static int flag = 0;
 
@@ -72,15 +66,14 @@ void handle_context_menu(HWND hWnd, LPARAM lParam)
     AppendMenu(hPopup, MF_SEPARATOR, 0, "");
     AppendMenu(hPopup, MF_STRING, 1002, "右键2");
 
-    switch(TrackPopupMenu(hPopup, TPM_RETURNCMD, LOWORD(lParam), HIWORD(lParam), 0, hWnd, NULL))
-    {
+    switch (TrackPopupMenu(hPopup, TPM_RETURNCMD, LOWORD(lParam),
+                           HIWORD(lParam), 0, hWnd, NULL)) {
     case 1001:
         flag = !flag;
         break;
     case 1002:
         MessageBox(hWnd, "右键2", "信息", MB_OK);
         break;
-
     }
 }
 
@@ -124,31 +117,26 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     case WM_EXITMENULOOP: {
         runtime->continue_run();
         break;
-    }            
+    }
 
     case WM_SETFOCUS: {
         break;
     }
 
-    case WM_CONTEXTMENU:{
-      
+    case WM_CONTEXTMENU: {
+
         handle_context_menu(hWnd, lParam);
         return 0;
     }
 
     case WM_CLOSE: {
-        DestroyWindow(hWnd);
-        break;
-    }
-    case WM_DESTROY: {
-        PostQuitMessage(0);
-        break;
+        runtime->terminal();
+        return 0;
     }
 
     case WM_SIZE: {
         runtime->window_width = LOWORD(lParam);
         runtime->window_height = HIWORD(lParam);
-        handle_reshape(LOWORD(lParam), HIWORD(lParam));
         break;
     }
 
@@ -165,7 +153,7 @@ void opengl_init(void) {
         std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
     }
 
-    if (!GLEW_ARB_compatibility){
+    if (!GLEW_ARB_compatibility) {
         std::cerr << "系统不支持旧的API" << std::endl;
         exit(-1);
     }
@@ -212,7 +200,7 @@ void handle_keyboard(float delta) {
 
     InputHandler &input = runtime->input;
     if (input.is_keydown(VK_ESCAPE)) {
-        runtime->exit();
+        runtime->terminal();
     }
     if (input.is_keydown('W')) {
         Vector3f ori = scene.camera.get_orientation();
@@ -258,9 +246,11 @@ void tick(float delta) {
 }
 
 void render_frame() {
+    glViewport(0, 0, runtime->window_width, runtime->window_height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    runtime->scene.camera.update(float(runtime->window_width) / float(runtime->window_height));
+    runtime->scene.camera.update(float(runtime->window_width) /
+                                 float(runtime->window_height));
 
     if (!runtime->render_frame) {
         runtime->scene.draw_polygon();
@@ -276,46 +266,55 @@ void render_frame() {
     checkError();
 }
 
-//渲染线程执行的代码
-void render_thread_func(){
+// 渲染线程执行的代码
+void render_thread_func() {
     std::cout << "RenderThreadStart\n";
 
-    // runtime->display.bind_opengl_context();
-    // opengl_init();
-
-    while(!runtime->renderer.render_thread_should_exit){
-        //std::cout << "RenderThreadRuning\n";
-    }
-    std::cout << "RenderThreadExit\n";
-}
-
-int main(int argc, char **argv) {
-    runtime = std::make_unique<GlobalRuntime>();
-    runtime->display.show(); // 必须在runtime初始化完成后再执行
-
+    runtime->display.bind_opengl_context();
     opengl_init();
 
-    runtime->clock.update();
-    while (!runtime->display.poll_events()) {
-        float delta = runtime->clock.update();
+    runtime->render_clock.update();
+    while (!runtime->renderer.render_thread_should_exit) {
+        float delta = runtime->render_clock.update();
 
-        if (!runtime->the_world_enable){
-            tick(delta);
-        }
         render_frame();
 
         std::wstringstream formatter;
         formatter << L"FPS: " << calculate_fps(delta) << "  ";
-        if (runtime->the_world_enable){
+        if (runtime->the_world_enable) {
             formatter << "(pause)";
         }
         runtime->display.set_title(formatter.str().c_str());
         runtime->display.swap();
     }
 
-    runtime->terminal();
-    runtime.reset();
+    runtime->display.delete_opengl_context();
 
-    std::cout << "Normal exit!\n"; 
+    PostThreadMessageW(runtime->main_thread_id, WM_QUIT, 0,
+                       0); // 通知主线程退出消息循环
+    std::cout << "RenderThreadExit\n";
+}
+
+const float TIME_PERTICK = 1000.0f / 60.0f;
+
+int main(int argc, char **argv) {
+    try {
+        runtime = std::make_unique<GlobalRuntime>();
+        runtime->display.show(); // 必须在runtime初始化完成后再执行
+
+        runtime->logic_clock.update();
+        while (!runtime->display.poll_events()) {
+            if (runtime->logic_clock.get_current_delta() > TIME_PERTICK && !runtime->the_world_enable){
+                float delta = runtime->logic_clock.update();
+                tick(delta);
+            }
+        }
+        
+        runtime.reset();
+
+        std::cout << "Normal exit!\n";
+    } catch (const std::exception &e) {
+        std::cerr << e.what() << std::endl;
+    }
     return 0;
 }

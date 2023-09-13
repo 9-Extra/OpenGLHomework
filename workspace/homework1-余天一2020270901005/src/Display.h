@@ -26,7 +26,7 @@ public:
     }
 
     void swap() {
-        if (!wglSwapLayerBuffers(hdc, WGL_SWAP_MAIN_PLANE)) {
+        if (!SwapBuffers (hdc)) {
             std::cerr << "交换前后缓冲失败\n";
             exit(-1);
         }
@@ -37,7 +37,7 @@ public:
 
         const WNDCLASSEXW window_class = {sizeof(WNDCLASSEXW),
                                           CS_OWNDC,
-                                        WindowProc,
+                                          WindowProc,
                                           0,
                                           0,
                                           hInstance,
@@ -49,10 +49,7 @@ public:
                                           NULL};
 
         RegisterClassExW(&window_class);
-        RECT rect = {100,
-                     100,
-                     100 + (LONG)width,
-                     (LONG)height};
+        RECT rect = {100, 100, 100 + (LONG)width, (LONG)height};
         AdjustWindowRectEx(&rect, WINDOW_STYLE, false, 0);
 
         hwnd = CreateWindowExW(0, L"MyWindow", L"标题", WINDOW_STYLE, 0, 0,
@@ -62,15 +59,8 @@ public:
         if (hwnd == NULL) {
             assert(false);
         }
-
-        bind_opengl_context();
     }
-    ~Display() {
-        wglMakeCurrent(NULL, NULL);
-
-        // delete the rendering context
-        wglDeleteContext(hglrc);
-    }
+    ~Display() { DestroyWindow(hwnd); }
 
 private:
     static const DWORD WINDOW_STYLE =
@@ -78,11 +68,13 @@ private:
 
     HDC hdc;
     HWND hwnd;
-    HGLRC hglrc;
+    HGLRC hglrc{NULL};
 
     friend void opengl_init(void);
     friend void render_thread_func();
+    // 对执行此函数的线程绑定opengl上下文
     void bind_opengl_context() {
+        assert(hglrc == NULL);
         hdc = GetDC(hwnd);
 
         PIXELFORMATDESCRIPTOR pfd = {
@@ -131,5 +123,10 @@ private:
         if (!wglMakeCurrent(hdc, hglrc)) {
             exit(-1);
         }
+    }
+
+    void delete_opengl_context() {
+        wglMakeCurrent(NULL, NULL);
+        wglDeleteContext(hglrc);
     }
 };

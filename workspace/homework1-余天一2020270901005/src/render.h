@@ -168,6 +168,7 @@ public:
 
     ~Renderer(){
         assert(render_thread_should_exit);
+        render_thread.join();
     }
 
 private:
@@ -192,8 +193,9 @@ private:
     }
 
     void terminal_thread(){
+        assert(!render_thread_should_exit);
         render_thread_should_exit = true;
-        render_thread.join();
+        //render_thread.join();
     }
 
 };
