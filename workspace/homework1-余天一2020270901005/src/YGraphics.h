@@ -1,9 +1,9 @@
 #pragma once
 #include "CGmath.h"
 #include <assert.h>
-#include <chrono>
 #include <cstdio>
-#include <gl/glew.h>
+#include <GL/glew.h>
+#include <GL/glext.h>
 #include <vector>
 
 
@@ -13,23 +13,6 @@ inline void checkError() {
         fprintf(stderr, "GL error 0x%X: %s\n", error, gluErrorString(error));
     }
 }
-
-class Clock {
-private:
-    std::chrono::time_point<std::chrono::steady_clock> now;
-
-public:
-    Clock() : now(std::chrono::steady_clock::now()) {}
-
-    float update() {
-        using namespace std::chrono;
-        float delta = duration_cast<duration<float, std::milli>>(
-                          steady_clock::now() - now)
-                          .count();
-        now = std::chrono::steady_clock::now();
-        return delta;
-    }
-};
 
 static unsigned int calculate_fps(float delta_time) {
     const float ratio = 0.1f;
@@ -110,20 +93,16 @@ inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z,
     float Height = CosFov / SinFov;
     float Width = Height / ratio;
 
-    return Matrix{{Width, 0.0f, 0.0f, 0.0f, 0.0f, Height, 0.0f, 0.0f, 0.0f,
+    return Matrix{Width, 0.0f, 0.0f, 0.0f, 0.0f, Height, 0.0f, 0.0f, 0.0f,
                    0.0f, -far_z / (far_z - near_z), -1.0f, 0.0f, 0.0f,
-                   -far_z * near_z / (far_z - near_z), 0.0f}}.transpose();
+                   -far_z * near_z / (far_z - near_z), 0.0f}.transpose();
 }
 
 class Camera {
-    friend class Scene;
-
-private:
-    float fov = 1.57f, far_z = 1000.0f, near_z = 0.1f;
-
-    Camera() {}
-
 public:
+    Camera() {}
+    
+    float fov = 1.57f, far_z = 1000.0f, near_z = 0.1f;
     Vector3f position{0.0, 0.0, 0.0};
     Vector3f rotation{0.0, 0.0, 0.0}; // zxy
 

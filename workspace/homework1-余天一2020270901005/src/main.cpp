@@ -5,9 +5,14 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include "clock.h"
+#include "render.h"
 
-struct GlobalRuntime {
+class GlobalRuntime {
+public:
     bool render_frame = false;
+
+    bool the_world_enable = false;
 
     uint32_t window_width;
     uint32_t window_height;
@@ -16,6 +21,7 @@ struct GlobalRuntime {
     Clock clock;
     Display display;
     InputHandler input;
+    Renderer renderer;
 
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
         : window_width(width), window_height(height), display(width, height) {
@@ -29,9 +35,24 @@ struct GlobalRuntime {
         platform.scale = {4.0, 0.1, 4.0};
         platform.position = {0.0, -2.0, -10.0};
         scene.objects.emplace_back(std::move(platform));
+
+        renderer.start_thread();
     }
 
     void exit() { PostQuitMessage(0); }
+
+    void the_world(){
+        the_world_enable = true;
+    }
+    void continue_run(){
+        the_world_enable = false;
+        clock.update();//skip time
+        input.clear_keyboard_state();
+    }
+
+    void terminal(){
+        renderer.terminal_thread();
+    }
 };
 
 std::unique_ptr<GlobalRuntime> runtime;
@@ -93,10 +114,24 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
         runtime->input.clear_keyboard_state();
         runtime->input.clear_mouse_state();
         break;
-        ;
+    }
+
+    case WM_ENTERMENULOOP: {
+        runtime->the_world();
+        break;
+    }
+
+    case WM_EXITMENULOOP: {
+        runtime->continue_run();
+        break;
+    }            
+
+    case WM_SETFOCUS: {
+        break;
     }
 
     case WM_CONTEXTMENU:{
+      
         handle_context_menu(hWnd, lParam);
         return 0;
     }
@@ -143,6 +178,7 @@ void opengl_init(void) {
     glClearColor(0.0, 0.0, 0.0, 0.0);
     // glShadeModel(GL_FLAT);
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
     glDepthFunc(GL_LESS);
 
     checkError();
@@ -240,6 +276,19 @@ void render_frame() {
     checkError();
 }
 
+//渲染线程执行的代码
+void render_thread_func(){
+    std::cout << "RenderThreadStart\n";
+
+    // runtime->display.bind_opengl_context();
+    // opengl_init();
+
+    while(!runtime->renderer.render_thread_should_exit){
+        //std::cout << "RenderThreadRuning\n";
+    }
+    std::cout << "RenderThreadExit\n";
+}
+
 int main(int argc, char **argv) {
     runtime = std::make_unique<GlobalRuntime>();
     runtime->display.show(); // 必须在runtime初始化完成后再执行
@@ -250,14 +299,22 @@ int main(int argc, char **argv) {
     while (!runtime->display.poll_events()) {
         float delta = runtime->clock.update();
 
-        tick(delta);
+        if (!runtime->the_world_enable){
+            tick(delta);
+        }
         render_frame();
 
         std::wstringstream formatter;
-        formatter << L"FPS: " << calculate_fps(delta);
+        formatter << L"FPS: " << calculate_fps(delta) << "  ";
+        if (runtime->the_world_enable){
+            formatter << "(pause)";
+        }
         runtime->display.set_title(formatter.str().c_str());
         runtime->display.swap();
     }
+
+    runtime->terminal();
+    runtime.reset();
 
     std::cout << "Normal exit!\n"; 
     return 0;

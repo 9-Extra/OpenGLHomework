@@ -35,25 +35,24 @@ public:
     Display(uint32_t width, uint32_t height) {
         HINSTANCE hInstance = GetModuleHandleW(NULL);
 
-        const WNDCLASSEXW window_class = {.cbSize = sizeof(WNDCLASSEXW),
-                                          .style = CS_OWNDC,
-                                          .lpfnWndProc = WindowProc,
-                                          .cbClsExtra = 0,
-                                          .cbWndExtra = 0,
-                                          .hInstance = hInstance,
-                                          .hIcon = LoadIcon(NULL, IDI_WINLOGO),
-                                          .hCursor =
-                                              LoadCursor(NULL, IDC_ARROW),
-                                          .hbrBackground = NULL,
-                                          .lpszMenuName = NULL,
-                                          .lpszClassName = L"MyWindow",
-                                          .hIconSm = NULL};
+        const WNDCLASSEXW window_class = {sizeof(WNDCLASSEXW),
+                                          CS_OWNDC,
+                                        WindowProc,
+                                          0,
+                                          0,
+                                          hInstance,
+                                          LoadIcon(NULL, IDI_WINLOGO),
+                                          LoadCursor(NULL, IDC_ARROW),
+                                          NULL,
+                                          NULL,
+                                          L"MyWindow",
+                                          NULL};
 
         RegisterClassExW(&window_class);
-        RECT rect = {.left = 100,
-                     .top = 100,
-                     .right = 100 + (LONG)width,
-                     .bottom = 100 + (LONG)height};
+        RECT rect = {100,
+                     100,
+                     100 + (LONG)width,
+                     (LONG)height};
         AdjustWindowRectEx(&rect, WINDOW_STYLE, false, 0);
 
         hwnd = CreateWindowExW(0, L"MyWindow", L"标题", WINDOW_STYLE, 0, 0,
@@ -82,6 +81,7 @@ private:
     HGLRC hglrc;
 
     friend void opengl_init(void);
+    friend void render_thread_func();
     void bind_opengl_context() {
         hdc = GetDC(hwnd);
 
@@ -106,8 +106,8 @@ private:
             0,
             0,
             0,              // accum bits ignored
-            24,             // 32-bit z-buffer
-            8,              // no stencil buffer
+            24,             // 24-bit z-buffer
+            8,              // stencil buffer
             0,              // no auxiliary buffer
             PFD_MAIN_PLANE, // main layer
             0,              // reserved

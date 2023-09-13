@@ -16,6 +16,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_ROOT}/bin)
 
 project(Graphics2023 LANGUAGES C CXX VERSION 0.1)
 
+if(MSVC)
+    add_compile_options(/W4)
+else()
+    add_compile_options(-Wall -Wextra -pedantic -Wno-gnu-anonymous-struct -Wno-nested-anon-types)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        add_compile_options(-Wno-unused-variable -Wno-unused-parameter -Wno-pedantic -Wno-unused-but-set-variable)
+    endif()
+endif()
+
 if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
   message(
     FATAL_ERROR

@@ -55,6 +55,7 @@ private:
 	}
 
 public:
+    friend class GlobalRuntime;
 	InputHandler() {
 		clear_keyboard_state();
 		clear_mouse_state();
