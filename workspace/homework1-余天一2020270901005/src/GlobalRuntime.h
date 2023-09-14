@@ -7,6 +7,7 @@
 #include "InputHandler.h"
 #include "Display.h"
 #include "Command.h"
+#include "system.h"
 
 class GlobalRuntime {
 public:
@@ -26,6 +27,8 @@ public:
     
     Clock logic_clock, render_clock;
     CommandContainer command_stack;
+
+    std::vector<std::unique_ptr<ISystem>> system_list;
 
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
         : main_thread_id(GetCurrentThreadId()), display(width, height), world(renderer){

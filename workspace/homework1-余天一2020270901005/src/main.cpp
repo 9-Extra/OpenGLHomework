@@ -1,6 +1,7 @@
 #include "GlobalRuntime.h"
 #include "assets.h"
 #include <sstream>
+#include <PainterSystem.h>
 
 std::unique_ptr<GlobalRuntime> runtime;
 
@@ -195,6 +196,15 @@ void tick() {
 
         runtime->input.clear_mouse_move();
 
+        std::vector<std::unique_ptr<ISystem>>& system_list = runtime->system_list;
+        for(size_t i = 0;i < system_list.size();i++){
+            system_list[i]->tick();
+            if (system_list[i]->delete_me()){
+                std::swap(system_list[i], system_list.back());
+                system_list.pop_back();
+            }
+        }
+
         runtime->world.tick(delta);
     }
 
@@ -272,6 +282,12 @@ int main(int argc, char **argv) {
     try {
         runtime = std::make_unique<GlobalRuntime>();
         runtime->display.show(); // 必须在runtime初始化完成后再执行
+
+        std::vector<std::unique_ptr<ISystem>>& system_list = runtime->system_list;
+        system_list.emplace_back(std::make_unique<PainterSystem>());
+        for(size_t i = 0;i < system_list.size();i++){
+            system_list[i]->init();
+        }
 
         runtime->logic_clock.update();
 

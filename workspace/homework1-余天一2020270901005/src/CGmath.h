@@ -52,6 +52,12 @@ struct Vector2f {
         return Vector2f(x * cosf(radiam) + y * sinf(radiam),
                         x * -sinf(radiam) + y * cosf(radiam));
     }
+
+    friend std::ostream& operator << (std::ostream& os, const Vector2f& v)
+	{
+		os << "(" << v.x << ", " << v.y << ")"; 
+		return os;
+	}
 };
 
 struct Color {
@@ -96,11 +102,12 @@ struct Vector3f {
     inline Vector3f operator+=(const Vector3f b) { return *this = *this + b; }
 
     inline Vector3f operator*(const float n) { return {x * n, y * n, z * n}; }
+    inline Vector3f operator/(const float n) { return *this * (1.0f / n);}
 
     inline float dot(const Vector3f b) { return x * b.x + y * b.y + z * b.z; }
 
     inline Vector3f cross(const Vector3f b) {
-        return {this->y * b.z - this->z * b.y, this->x * b.z - this->z * b.y,
+        return {this->y * b.z - this->z * b.y, this->z * b.x * this->x * b.z,
                 this->x * b.y - this->y * b.x};
     }
 
@@ -110,6 +117,12 @@ struct Vector3f {
         float inv_sqrt = Q_rsqrt(this->square());
         return *this * inv_sqrt;
     }
+
+    friend std::ostream& operator << (std::ostream& os, const Vector3f& v)
+	{
+		os << "(" << v.x << ", " << v.y << ", " << v.z << ")"; 
+		return os;
+	}
 };
 
 struct Matrix {
