@@ -10,19 +10,11 @@ void handle_context_menu(HWND hWnd, LPARAM lParam) {
     HMENU hPopup = CreatePopupMenu();
     static int flag = 0;
 
-    AppendMenu(hPopup, MF_STRING | (flag ? MF_CHECKED : 0), 1001, "选择");
-    AppendMenu(hPopup, MF_SEPARATOR, 0, "");
-    AppendMenu(hPopup, MF_STRING, 1002, "右键2");
+    AppendMenuW(hPopup, MF_STRING | (flag ? MF_CHECKED : 0), 1001, L"选择");
+    AppendMenuW(hPopup, MF_SEPARATOR, 0, NULL);
+    AppendMenuW(hPopup, MF_STRING, 1002, L"右键2");
 
-    switch (TrackPopupMenu(hPopup, TPM_RETURNCMD, LOWORD(lParam),
-                           HIWORD(lParam), 0, hWnd, NULL)) {
-    case 1001:
-        flag = !flag;
-        break;
-    case 1002:
-        MessageBox(hWnd, "右键2", "信息", MB_OK);
-        break;
-    }
+    DestroyMenu(hPopup);
 }
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
@@ -78,8 +70,16 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_CONTEXTMENU: {
-        handle_context_menu(hWnd, lParam);
+        runtime->display.display_pop_menu(lParam);
         return 0;
+    }
+
+    case WM_COMMAND: {
+        if (HIWORD(wParam) == 0){
+            //来自目录点击的信息
+            runtime->display.on_menu_click(LOWORD(wParam));
+        }
+        break;
     }
 
     case WM_CLOSE: {
@@ -244,6 +244,13 @@ void init_render_resource() {
         (uint32_t)Assets::cube_indices.size()
     };
     resource.add_mesh("line", std::move(line_mesh));
+
+    Mesh plane_mesh{
+        Assets::plane_vertices,
+        Assets::plane_indices,
+        (uint32_t)Assets::plane_indices.size()
+    };
+    resource.add_mesh("plane", std::move(plane_mesh));
 }
 
 // 渲染线程执行的代码
@@ -301,6 +308,8 @@ int main(int argc, char **argv) {
         while (!event_loop()) {
             tick();
         }
+
+        runtime->system_list.clear();
 
         runtime.reset();
 

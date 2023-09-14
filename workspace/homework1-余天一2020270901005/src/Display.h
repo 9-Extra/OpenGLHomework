@@ -4,14 +4,44 @@
 #include <assert.h>
 #include <cstdint>
 #include <iostream>
+#include "GuidAlloctor.h"
+#include <functional>
 
 extern LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam,
                                    LPARAM lParam);
 
+using MenuCallBack = std::function<void(uint32_t)>;
 class Display {
 public:
     void show() { ShowWindow(hwnd, SW_SHOW); }
     void set_title(LPCWSTR title) { SetWindowTextW(hwnd, title); }
+
+    uint32_t append_menu_item(UINT flag, LPCWSTR name, MenuCallBack callback){
+        uint32_t id = menu_item_id_alloctor.alloc_id();
+        AppendMenuW(popup_menu, flag, id, name);
+        menu_callback_list.emplace(id, callback);
+        return id;
+    }
+    void modify_menu_item(uint32_t id, UINT flag, LPCWSTR name){
+        ModifyMenuW(popup_menu, id, MF_BYCOMMAND | flag, id, name);
+    }
+
+    void delete_menu_item(uint32_t id){
+        DeleteMenu(popup_menu, id, MF_BYCOMMAND);
+        menu_callback_list.erase(id);
+        menu_item_id_alloctor.free_id(id);
+    }
+
+    int get_menu_item_count(){
+        return GetMenuItemCount(popup_menu);
+    }
+
+    void display_pop_menu(WPARAM lParam){
+        TrackPopupMenu(popup_menu, 0, LOWORD(lParam),HIWORD(lParam), 0, hwnd, NULL);
+    }
+    void on_menu_click(uint32_t id){
+        menu_callback_list.at(id)(id);
+    }
 
     void swap() {
         if (!SwapBuffers (hdc)) {
@@ -47,8 +77,13 @@ public:
         if (hwnd == NULL) {
             assert(false);
         }
+
+        popup_menu = CreatePopupMenu();
     }
-    ~Display() { DestroyWindow(hwnd); }
+    ~Display() {
+        DestroyMenu(popup_menu);
+        DestroyWindow(hwnd); 
+    }
 
 private:
     static const DWORD WINDOW_STYLE =
@@ -56,6 +91,9 @@ private:
 
     HDC hdc;
     HWND hwnd;
+    HMENU popup_menu;
+    GuidAlloctor menu_item_id_alloctor;
+    std::unordered_map<uint32_t, MenuCallBack> menu_callback_list;
     HGLRC hglrc{NULL};
 
     friend void opengl_init(void);

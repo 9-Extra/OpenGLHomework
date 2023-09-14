@@ -233,7 +233,7 @@ public:
     void render() {
         scene.update(resouces, swap_data[1]);
 
-        //glDrawBuffer(GL_BACK);//渲染到后缓冲区
+        glDrawBuffer(GL_BACK);//渲染到后缓冲区
         glViewport(0, 0, scene.window_width, scene.window_height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -277,7 +277,9 @@ public:
     bool render_thread_should_exit{false};
 
     ~Renderer() {
-        assert(render_thread_should_exit);
+        if (!render_thread_should_exit){
+            std::cerr << "渲染线程意外退出！！！" << std::endl;
+        }
         render_thread.join();
     }
 
