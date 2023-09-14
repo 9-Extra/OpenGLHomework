@@ -7,6 +7,7 @@
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <atomic>
 
 
 class GlobalRuntime {
@@ -14,6 +15,8 @@ public:
     bool render_frame = false;
 
     bool the_world_enable = false;
+
+    std::atomic_int32_t fps;
 
     DWORD main_thread_id;
     uint32_t window_width;
@@ -78,6 +81,9 @@ void handle_context_menu(HWND hWnd, LPARAM lParam) {
 }
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
+    if (!runtime){
+        return DefWindowProcW(hWnd, Msg, wParam, lParam);//未初始化或者结束后按默认规则处理
+    }
     switch (Msg) {
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
@@ -124,7 +130,6 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_CONTEXTMENU: {
-
         handle_context_menu(hWnd, lParam);
         return 0;
     }
@@ -279,12 +284,7 @@ void render_thread_func() {
 
         render_frame();
 
-        std::wstringstream formatter;
-        formatter << L"FPS: " << calculate_fps(delta) << "  ";
-        if (runtime->the_world_enable) {
-            formatter << "(pause)";
-        }
-        runtime->display.set_title(formatter.str().c_str());
+        runtime->fps = calculate_fps(delta);
         runtime->display.swap();
     }
 
@@ -304,10 +304,23 @@ int main(int argc, char **argv) {
 
         runtime->logic_clock.update();
         while (!runtime->display.poll_events()) {
-            if (runtime->logic_clock.get_current_delta() > TIME_PERTICK && !runtime->the_world_enable){
-                float delta = runtime->logic_clock.update();
+            // if (runtime->logic_clock.get_current_delta() > TIME_PERTICK && !runtime->the_world_enable){
+            //     float delta = runtime->logic_clock.update();
+            //     tick(delta);
+            // }
+            float delta = runtime->logic_clock.update();
+            if (!runtime->the_world_enable){
                 tick(delta);
             }
+
+            std::wstringstream formatter;
+            formatter << L"FPS: " << runtime->fps.load() << "  ";
+            if (runtime->the_world_enable) {
+                formatter << "(pause)";
+            }
+            runtime->display.set_title(formatter.str().c_str());
+            DWORD sleep_time = (DWORD)std::max<float>(0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
+            Sleep(sleep_time);
         }
         
         runtime.reset();

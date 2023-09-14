@@ -129,4 +129,5 @@ private:
         wglMakeCurrent(NULL, NULL);
         wglDeleteContext(hglrc);
     }
+    
 };
