@@ -79,7 +79,7 @@ private:
                     p.resource_key_mesh,
                     p.resource_key_material,
                     p.topology,
-                    p.model_matrix * transform
+                    transform * p.model_matrix
                 );
             }
             swap_data.add_dirty_gameobject(GameObjectRenderDesc{id, std::move(dirty_parts)});

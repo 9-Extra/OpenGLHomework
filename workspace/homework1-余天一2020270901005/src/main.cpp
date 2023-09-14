@@ -130,14 +130,14 @@ void handle_mouse() {
     // 左上角为(0,0)，右下角为(w,h)
     InputHandler &input = runtime->input;
 
-    if (input.is_left_button_down()) {
-        auto [dx, dy] = input.get_mouse_move().v;
-        // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
-        const float rotate_speed = 0.003f;
-        CameraDesc &desc = runtime->world.set_camera();
-        desc.rotation.z += dx * rotate_speed;
-        desc.rotation.y -= dy * rotate_speed;
-    }
+    // if (input.is_left_button_down()) {
+    //     auto [dx, dy] = input.get_mouse_move().v;
+    //     // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
+    //     const float rotate_speed = 0.003f;
+    //     CameraDesc &desc = runtime->world.set_camera();
+    //     desc.rotation.z += dx * rotate_speed;
+    //     desc.rotation.y -= dy * rotate_speed;
+    // }
 }
 
 void handle_keyboard(float delta) {
@@ -237,6 +237,13 @@ void init_render_resource() {
 
     PhongMaterial default_material{{1.0f, 1.0f, 1.0f}, 15.0f};
     resource.add_material("default", std::move(default_material));
+
+    Mesh line_mesh{
+        Assets::line_vertices,
+        Assets::line_indices,
+        (uint32_t)Assets::cube_indices.size()
+    };
+    resource.add_mesh("line", std::move(line_mesh));
 }
 
 // 渲染线程执行的代码
