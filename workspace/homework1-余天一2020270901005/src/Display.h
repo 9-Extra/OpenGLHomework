@@ -12,18 +12,6 @@ class Display {
 public:
     void show() { ShowWindow(hwnd, SW_SHOW); }
     void set_title(LPCWSTR title) { SetWindowTextW(hwnd, title); }
-    bool poll_events() {
-        {
-            MSG msg;
-            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-                DispatchMessage(&msg);
-                if (msg.message == WM_QUIT) {
-                    return true;
-                }
-            }
-            return false;
-        }
-    }
 
     void swap() {
         if (!SwapBuffers (hdc)) {

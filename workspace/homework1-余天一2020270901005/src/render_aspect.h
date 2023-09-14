@@ -1,5 +1,5 @@
 #pragma once
-#include "YGraphics.h"
+#include "CGmath.h"
 #include <cstdint>
 #include <vector>
 
@@ -8,6 +8,12 @@ struct BoundingBox{
     Vector3f max_corner;
 };
 
+struct Vertex {
+    Vector3f position;
+    Color color;
+};
+
+
 struct PipeLineState{
 
 };
@@ -15,6 +21,7 @@ struct PipeLineState{
 struct RenderItem final {
     uint32_t mesh_id;
     uint32_t material_id;
+    uint32_t topology;
 
     Matrix model_matrix;
 };
@@ -30,13 +37,34 @@ struct DirectionalLight{
 };
 
 struct Mesh{
-    std::vector<Vertex> vertices;
-    std::vector<uint32_t> indices;
-    uint32_t indices_count;
+    const std::vector<Vertex> vertices;
+    const std::vector<uint32_t> indices;
+    const uint32_t indices_count;
 };
 
 struct PhongMaterial{
-    unsigned int diffusion_texture;
-    unsigned int normal_texture;
+    Vector3f diffusion;
     float specular_factor;
+};
+
+struct Camera {
+public:
+    Camera() {}
+    
+    Matrix view_perspective_matrix;
+    Vector3f position;
+    Vector3f rotation; // zxy
+
+    // 获取目视方向
+    Vector3f get_orientation() const {
+        float pitch = rotation[1];
+        float yaw = rotation[2];
+        return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
+    }
+
+    void set_view_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
+        view_perspective_matrix = compute_perspective_matrix(ratio, fov, near_z, far_z) *
+            Matrix::rotate(rotation).transpose() *
+            Matrix::translate(-position);
+    }
 };

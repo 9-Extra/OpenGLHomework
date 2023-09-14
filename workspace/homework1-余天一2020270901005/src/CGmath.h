@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <assert.h>
 
 static float Q_rsqrt(float number) {
     long i;
@@ -114,21 +115,26 @@ struct Matrix {
     float m[4][4];
 
     Matrix() {}
-    Matrix(
+    constexpr Matrix(
         float m00, float m01, float m02,float m03,
         float m10, float m11, float m12,float m13,
         float m20, float m21, float m22,float m23,
         float m30, float m31, float m32,float m33
-        ) {
-            m[0][0] = m00;m[0][1] = m01;m[0][2] = m02;m[0][3] = m03;
-            m[1][0] = m10;m[1][1] = m11;m[1][2] = m12;m[1][3] = m13;
-            m[2][0] = m20;m[2][1] = m21;m[2][2] = m22;m[2][3] = m23;
-            m[3][0] = m30;m[3][1] = m31;m[3][2] = m32;m[3][3] = m33;
+        ) : m{
+            {m00, m01, m02, m03},
+            {m10, m11, m12, m13},
+            {m20, m21, m22, m23},
+            {m30, m31, m32, m33}
+        }{
+            // m[0][0] = m00;m[0][1] = m01;m[0][2] = m02;m[0][3] = m03;
+            // m[1][0] = m10;m[1][1] = m11;m[1][2] = m12;m[1][3] = m13;
+            // m[2][0] = m20;m[2][1] = m21;m[2][2] = m22;m[2][3] = m23;
+            // m[3][0] = m30;m[3][1] = m31;m[3][2] = m32;m[3][3] = m33;
         }
 
-    float *data() { return (float *)m; }
+    const float *data() const { return (float *)m; }
 
-    inline Matrix transpose() {
+    inline Matrix transpose() const{
         Matrix r;
         for (unsigned int i = 0; i < 4; i++) {
             for (unsigned int j = 0; j < 4; j++) {
@@ -138,7 +144,7 @@ struct Matrix {
         return r;
     }
 
-    inline static Matrix identity() {
+    constexpr static Matrix identity() {
         Matrix m{
             1.0, 0.0, 0.0, 0.0,
             0.0, 1.0, 0.0, 0.0,
@@ -149,7 +155,7 @@ struct Matrix {
         return m;
     }
 
-    inline Matrix operator*(const Matrix &m) {
+    inline Matrix operator*(const Matrix &m) const{
         Matrix r;
         for (unsigned int i = 0; i < 4; i++) {
             for (unsigned int j = 0; j < 4; j++) {
@@ -207,6 +213,20 @@ struct Matrix {
         return Matrix::scale(scale.x, scale.y, scale.z);
     }
 };
+
+inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z,
+                                         float far_z) {
+    assert(near_z < far_z);//不要写反了！！！！！！！！！！
+    float SinFov = std::sin(fov * 0.5f);
+    float CosFov = std::cos(fov * 0.5f);
+
+    float Height = CosFov / SinFov;
+    float Width = Height / ratio;
+
+    return Matrix{Width, 0.0f, 0.0f, 0.0f, 0.0f, Height, 0.0f, 0.0f, 0.0f,
+                   0.0f, -far_z / (far_z - near_z), -1.0f, 0.0f, 0.0f,
+                   -far_z * near_z / (far_z - near_z), 0.0f}.transpose();
+}
 
 // struct Quaternion {
 // 	float x, y, z, w;

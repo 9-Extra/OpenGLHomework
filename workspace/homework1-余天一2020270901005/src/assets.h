@@ -1,7 +1,8 @@
 #pragma once
-#include "YGraphics.h"
+#include "render_aspect.h"
 #include <vector>
 
+namespace Assets {
 const std::vector<Vertex> cube_vertices = {
     {{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}}, {{1.0, -1.0, -1.0}, {1.0, 0.0, 0.0}},
     {{1.0, 1.0, -1.0}, {1.0, 1.0, 0.0}},   {{-1.0, 1.0, -1.0}, {0.0, 1.0, 0.0}},
@@ -17,3 +18,5 @@ const std::vector<Vertex> platform_vertices = {
 const std::vector<unsigned int> cube_indices = {
     1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2, 3, 7, 3, 0, 0, 4, 7,
     2, 6, 5, 5, 1, 2, 4, 5, 6, 6, 7, 4, 5, 4, 0, 0, 1, 5};
+
+} // namespace Assets

@@ -1,64 +1,35 @@
-#include "Display.h"
-#include "InputHandler.h"
-#include "YGraphics.h"
-#include "clock.h"
-#include "models.h"
-#include "render.h"
-#include <iostream>
-#include <memory>
+#include "GlobalRuntime.h"
+#include "assets.h"
 #include <sstream>
-#include <atomic>
 
-
-class GlobalRuntime {
-public:
-    bool render_frame = false;
-
-    bool the_world_enable = false;
-
-    std::atomic_int32_t fps;
-
-    DWORD main_thread_id;
-    uint32_t window_width;
-    uint32_t window_height;
-
-    Scene scene;
-    Clock logic_clock, render_clock;
-    Display display;
-    InputHandler input;
-    Renderer renderer;
-
-    GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
-        : main_thread_id(GetCurrentThreadId()), window_width(width),
-          window_height(height), display(width, height) {
-        GraphicsObject cube =
-            GraphicsObject(std::move(cube_vertices), std::move(cube_indices));
-        cube.position = {0.0, 0.0, -10.0};
-        scene.objects.emplace_back(std::move(cube));
-
-        GraphicsObject platform = GraphicsObject(std::move(platform_vertices),
-                                                 std::move(cube_indices));
-        platform.scale = {4.0, 0.1, 4.0};
-        platform.position = {0.0, -2.0, -10.0};
-        scene.objects.emplace_back(std::move(platform));
-
-        renderer.start_thread();
-    }
-
-    void the_world() { the_world_enable = true; }
-    void continue_run() {
-        the_world_enable = false;
-        logic_clock.update(); // skip time
-        input.clear_keyboard_state();
-    }
-
-    void terminal() {
-        // 通知渲染线程退出，但是继续执行，直到渲染线程在退出时通知主线程结束消息循环
-        renderer.terminal_thread();
-    }
-};
+#define MY_MSG_RESOURCE_INITIZED 0x8000 + 1
 
 std::unique_ptr<GlobalRuntime> runtime;
+
+void init_start_scene(World &world) {
+    {
+        CameraDesc& desc = world.set_camera();
+        desc.position = {0.0f, 0.0f, 0.0f};
+        desc.rotation = {0.0f, 0.0f, 0.0f};
+        desc.fov = 1.57f;
+        desc.near_z = 1.0f;
+        desc.far_z = 1000.0f;
+        desc.ratio = float(runtime->window_width) / float(runtime->window_height);
+    }
+    {
+        GObject &cube = world.objects.at(world.create_object());
+        cube.set_parts().emplace_back(GameObjectPartDesc{"cube", "default"});
+        cube.set_position({0.0, 0.0, -10.0});
+    }
+
+    {
+        GObject &platform = world.objects.at(world.create_object());
+        platform.set_parts().emplace_back(
+            GameObjectPartDesc{"platform", "default"});
+        platform.set_position({0.0, -2.0, -10.0});
+        platform.set_scale({4.0, 0.1, 4.0});
+    }
+}
 
 // 右键菜单
 void handle_context_menu(HWND hWnd, LPARAM lParam) {
@@ -81,8 +52,9 @@ void handle_context_menu(HWND hWnd, LPARAM lParam) {
 }
 
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
-    if (!runtime){
-        return DefWindowProcW(hWnd, Msg, wParam, lParam);//未初始化或者结束后按默认规则处理
+    if (!runtime) {
+        return DefWindowProcW(hWnd, Msg, wParam,
+                              lParam); // 未初始化或者结束后按默认规则处理
     }
     switch (Msg) {
     case WM_LBUTTONDOWN:
@@ -110,8 +82,14 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_KILLFOCUS: {
+        runtime->the_world();
         runtime->input.clear_keyboard_state();
         runtime->input.clear_mouse_state();
+        break;
+    }
+
+    case WM_SETFOCUS: {
+        runtime->continue_run();
         break;
     }
 
@@ -122,10 +100,6 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_EXITMENULOOP: {
         runtime->continue_run();
-        break;
-    }
-
-    case WM_SETFOCUS: {
         break;
     }
 
@@ -176,31 +150,31 @@ void opengl_init(void) {
 
     checkError();
 }
-
 // 只在鼠标按下时启用
 void handle_mouse() {
     // 左上角为(0,0)，右下角为(w,h)
     InputHandler &input = runtime->input;
     // 处理拖拽
 
-    if (input.is_left_button_down()) {
-        auto [dx, dy] = input.get_mouse_move().v;
-        // 旋转图形
-        const float s = 0.003f;
-        runtime->scene.objects[0].rotation += {0.0, dy * s, -dx * s};
-    }
+    // if (input.is_left_button_down()) {
+    //     auto [dx, dy] = input.get_mouse_move().v;
+    //     // 旋转图形
+    //     const float s = 0.003f;
+    //     runtime->scene.objects[0].rotation += {0.0, dy * s, -dx * s};
+    // }
 
-    if (input.is_right_button_down()) {
+    if (input.is_left_button_down()) {
         auto [dx, dy] = input.get_mouse_move().v;
         // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
         const float rotate_speed = 0.003f;
-        runtime->scene.camera.rotation.z += dx * rotate_speed;
-        runtime->scene.camera.rotation.y -= dy * rotate_speed;
+        CameraDesc &desc = runtime->world.set_camera();
+        desc.rotation.z += dx * rotate_speed;
+        desc.rotation.y -= dy * rotate_speed;
     }
 }
 
 void handle_keyboard(float delta) {
-    Scene &scene = runtime->scene;
+    World &world = runtime->world;
     const float move_speed = 0.01f * delta;
 
     InputHandler &input = runtime->input;
@@ -208,38 +182,37 @@ void handle_keyboard(float delta) {
         runtime->terminal();
     }
     if (input.is_keydown('W')) {
-        Vector3f ori = scene.camera.get_orientation();
+        Vector3f ori = world.get_camera_oritation();
         ori.y = 0.0;
-        scene.camera.position += ori.normalize() * move_speed;
+        world.set_camera().position += ori.normalize() * move_speed;
     }
     if (input.is_keydown('S')) {
-        Vector3f ori = scene.camera.get_orientation();
+        Vector3f ori = world.get_camera_oritation();
         ori.y = 0.0;
-        scene.camera.position += ori.normalize() * -move_speed;
+        world.set_camera().position += ori.normalize() * -move_speed;
     }
     if (input.is_keydown('A')) {
-        Vector3f ori = scene.camera.get_orientation();
+        Vector3f ori = world.get_camera_oritation();
         ori = {ori.z, 0.0, -ori.x};
-        scene.camera.position += ori.normalize() * move_speed;
+        world.set_camera().position += ori.normalize() * move_speed;
     }
     if (input.is_keydown('D')) {
-        Vector3f ori = scene.camera.get_orientation();
+        Vector3f ori = world.get_camera_oritation();
         ori = {ori.z, 0.0, -ori.x};
-        scene.camera.position += ori.normalize() * -move_speed;
+        world.set_camera().position += ori.normalize() * -move_speed;
     }
     if (input.is_keydown(VK_SPACE)) {
-        scene.camera.position.y += move_speed;
+        world.set_camera().position.y += move_speed;
     }
     if (input.is_keydown(VK_SHIFT)) {
-        scene.camera.position.y -= move_speed;
+        world.set_camera().position.y -= move_speed;
     }
     if (input.is_keydown('1')) {
         runtime->render_frame = !runtime->render_frame;
     }
     if (input.is_keydown('0')) {
-        scene.camera.position = {0.0, 0.0, 0.0};
-        scene.camera.rotation = {0.0, 0.0, 0.0};
-        scene.objects[0].rotation = {0.0, 0.0, 0.0};
+        world.set_camera().position = {0.0, 0.0, 0.0};
+        world.set_camera().rotation = {0.0, 0.0, 0.0};
     }
 }
 
@@ -248,27 +221,38 @@ void tick(float delta) {
     handle_keyboard(delta);
 
     runtime->input.clear_mouse_move();
+
+    runtime->world.tick(delta);
 }
 
 void render_frame() {
     glViewport(0, 0, runtime->window_width, runtime->window_height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    runtime->scene.camera.update(float(runtime->window_width) /
-                                 float(runtime->window_height));
-
-    if (!runtime->render_frame) {
-        runtime->scene.draw_polygon();
-    } else {
-        runtime->scene.draw_wireframe();
-    }
-
-    std::stringstream formatter;
-    Vector3f position = runtime->scene.camera.position;
-    Vector3f look = runtime->scene.camera.get_orientation();
+    runtime->renderer.render();
 
     glFlush();
     checkError();
+}
+
+// 由渲染线程执行，加载资源
+void init_render_resource() {
+    RenderReousce &resource = runtime->renderer.resouces;
+    Mesh cube_mesh{Assets::cube_vertices, Assets::cube_indices,
+                   (uint32_t)Assets::cube_indices.size()};
+    resource.add_mesh("cube", std::move(cube_mesh));
+
+    Mesh platform_mesh{Assets::platform_vertices, Assets::cube_indices,
+                       (uint32_t)Assets::cube_indices.size()};
+
+    resource.add_mesh("platform", std::move(platform_mesh));
+
+    Mesh default_mesh{{}, {}, 0};
+
+    resource.add_mesh("default", std::move(default_mesh));
+
+    PhongMaterial default_material{{1.0f, 1.0f, 1.0f}, 15.0f};
+    resource.add_material("default", std::move(default_material));
 }
 
 // 渲染线程执行的代码
@@ -279,6 +263,12 @@ void render_thread_func() {
     opengl_init();
 
     runtime->render_clock.update();
+
+    init_render_resource();
+
+    // 通知主线程资源加载完毕，可以开始初始化场景并运行逻辑帧
+    PostThreadMessageW(runtime->main_thread_id, MY_MSG_RESOURCE_INITIZED, 0, 0);
+
     while (!runtime->renderer.render_thread_should_exit) {
         float delta = runtime->render_clock.update();
 
@@ -297,19 +287,31 @@ void render_thread_func() {
 
 const float TIME_PERTICK = 1000.0f / 60.0f;
 
+bool poll_event() {
+    MSG msg;
+    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+        DispatchMessage(&msg);
+        if (msg.message == WM_QUIT) {
+            return true;
+        }
+        if (msg.message == MY_MSG_RESOURCE_INITIZED){
+            std::cout << "开始加载场景\n";
+            init_start_scene(runtime->world);
+            runtime->continue_run();//加载完场景后，逻辑帧开始执行
+        }
+    }
+    return false;
+}
+
 int main(int argc, char **argv) {
     try {
         runtime = std::make_unique<GlobalRuntime>();
         runtime->display.show(); // 必须在runtime初始化完成后再执行
 
         runtime->logic_clock.update();
-        while (!runtime->display.poll_events()) {
-            // if (runtime->logic_clock.get_current_delta() > TIME_PERTICK && !runtime->the_world_enable){
-            //     float delta = runtime->logic_clock.update();
-            //     tick(delta);
-            // }
+        while (!poll_event()) {
             float delta = runtime->logic_clock.update();
-            if (!runtime->the_world_enable){
+            if (!runtime->the_world_enable) {
                 tick(delta);
             }
 
@@ -319,10 +321,13 @@ int main(int argc, char **argv) {
                 formatter << "(pause)";
             }
             runtime->display.set_title(formatter.str().c_str());
-            DWORD sleep_time = (DWORD)std::max<float>(0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
+
+            // 控制执行频率
+            DWORD sleep_time = (DWORD)std::max<float>(
+                0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
             Sleep(sleep_time);
         }
-        
+
         runtime.reset();
 
         std::cout << "Normal exit!\n";
