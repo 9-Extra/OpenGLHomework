@@ -36,7 +36,7 @@ inline unsigned int calculate_fps(float delta_time) {
 struct CameraDesc {
     Vector3f position;
     Vector3f rotation;
-    float ratio;
+    uint32_t window_width, window_height;
     float fov, far_z, near_z;
 };
 
@@ -148,7 +148,7 @@ struct LockedSwapData {
     std::lock_guard<std::mutex> lock;
 
     LockedSwapData(RenderSwapData &data, std::mutex &mutx)
-        : data(data), lock(mutx) {}
+        : data(data), lock(mutx, std::adopt_lock) {}
 
     RenderSwapData *operator->() { return &data; }
 
@@ -160,7 +160,9 @@ struct LockedSwapData {
         data.light_desc.emplace_back(desc);
     }
 
-    void set_camera(const CameraDesc &desc) { data.camera_desc.emplace(desc); }
+    void set_camera(const CameraDesc &desc) {
+        data.camera_desc.emplace(desc); 
+    }
 
     void delete_game_object(const uint32_t id) {
         data.game_object_to_delete.push_back(id);
@@ -170,6 +172,8 @@ struct LockedSwapData {
 struct RenderScene {
     Camera main_camera;
     std::unordered_map<GameObjectPartId, RenderItem> item_list;
+    uint32_t window_width;
+    uint32_t window_height;
 
     void update(RenderReousce &resources, const RenderSwapData &swap_data) {
 
@@ -177,7 +181,9 @@ struct RenderScene {
             const CameraDesc &desc = swap_data.camera_desc.value();
             main_camera.position = desc.position;
             main_camera.rotation = desc.rotation;
-            main_camera.set_view_perspective_matrix(desc.ratio, desc.fov,
+            window_width = desc.window_width;
+            window_height = desc.window_height;
+            main_camera.set_view_perspective_matrix(float(desc.window_width) / float(desc.window_height), desc.fov,
                                                     desc.near_z, desc.far_z);
         }
 
@@ -220,13 +226,17 @@ public:
 
     LockedSwapData get_logic_swap_data() {
         // 构造LockedSwapData会自动加锁，析构自动解锁
+        swap_data_lock.lock();
         return LockedSwapData(swap_data[0], swap_data_lock);
     }
 
     void render() {
         scene.update(resouces, swap_data[1]);
 
-        glDrawBuffer(GL_BACK);//渲染到后缓冲区
+        //glDrawBuffer(GL_BACK);//渲染到后缓冲区
+        glViewport(0, 0, scene.window_width, scene.window_height);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
         glMatrixMode(GL_PROJECTION);
         glLoadMatrixf(
             scene.main_camera.view_perspective_matrix.transpose().data());
@@ -248,6 +258,10 @@ public:
             }
             glEnd();
         }
+
+        glFlush();
+        checkError();
+        
         do_swap();
     }
 

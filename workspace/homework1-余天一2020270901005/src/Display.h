@@ -37,7 +37,7 @@ public:
                                           NULL};
 
         RegisterClassExW(&window_class);
-        RECT rect = {100, 100, 100 + (LONG)width, (LONG)height};
+        RECT rect = {100, 100, 100 + (LONG)width, 100 +(LONG)height};
         AdjustWindowRectEx(&rect, WINDOW_STYLE, false, 0);
 
         hwnd = CreateWindowExW(0, L"MyWindow", L"标题", WINDOW_STYLE, 0, 0,

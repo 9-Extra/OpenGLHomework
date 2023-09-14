@@ -2,34 +2,7 @@
 #include "assets.h"
 #include <sstream>
 
-#define MY_MSG_RESOURCE_INITIZED 0x8000 + 1
-
 std::unique_ptr<GlobalRuntime> runtime;
-
-void init_start_scene(World &world) {
-    {
-        CameraDesc& desc = world.set_camera();
-        desc.position = {0.0f, 0.0f, 0.0f};
-        desc.rotation = {0.0f, 0.0f, 0.0f};
-        desc.fov = 1.57f;
-        desc.near_z = 1.0f;
-        desc.far_z = 1000.0f;
-        desc.ratio = float(runtime->window_width) / float(runtime->window_height);
-    }
-    {
-        GObject &cube = world.objects.at(world.create_object());
-        cube.set_parts().emplace_back(GameObjectPartDesc{"cube", "default"});
-        cube.set_position({0.0, 0.0, -10.0});
-    }
-
-    {
-        GObject &platform = world.objects.at(world.create_object());
-        platform.set_parts().emplace_back(
-            GameObjectPartDesc{"platform", "default"});
-        platform.set_position({0.0, -2.0, -10.0});
-        platform.set_scale({4.0, 0.1, 4.0});
-    }
-}
 
 // 右键菜单
 void handle_context_menu(HWND hWnd, LPARAM lParam) {
@@ -114,8 +87,9 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_SIZE: {
-        runtime->window_width = LOWORD(lParam);
-        runtime->window_height = HIWORD(lParam);
+        CameraDesc &camera = runtime->world.set_camera();
+        camera.window_width = LOWORD(lParam);
+        camera.window_height = HIWORD(lParam);
         break;
     }
 
@@ -154,14 +128,6 @@ void opengl_init(void) {
 void handle_mouse() {
     // 左上角为(0,0)，右下角为(w,h)
     InputHandler &input = runtime->input;
-    // 处理拖拽
-
-    // if (input.is_left_button_down()) {
-    //     auto [dx, dy] = input.get_mouse_move().v;
-    //     // 旋转图形
-    //     const float s = 0.003f;
-    //     runtime->scene.objects[0].rotation += {0.0, dy * s, -dx * s};
-    // }
 
     if (input.is_left_button_down()) {
         auto [dx, dy] = input.get_mouse_move().v;
@@ -216,23 +182,31 @@ void handle_keyboard(float delta) {
     }
 }
 
-void tick(float delta) {
-    handle_mouse();
-    handle_keyboard(delta);
+const float TIME_PERTICK = 1000.0f / 60.0f;
 
-    runtime->input.clear_mouse_move();
+void tick() {
+    static uint32_t tick_count = 0;
+    float delta = runtime->logic_clock.update();
+    if (!runtime->the_world_enable) {
+        //std::cerr << "start tick: " << tick_count << std::endl;
+        tick_count++;
+        handle_mouse();
+        handle_keyboard(delta);
 
-    runtime->world.tick(delta);
-}
+        runtime->input.clear_mouse_move();
 
-void render_frame() {
-    glViewport(0, 0, runtime->window_width, runtime->window_height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        runtime->world.tick(delta);
+    }
 
-    runtime->renderer.render();
+    std::wstringstream formatter;
+    formatter << L"FPS: " << runtime->fps.load() << "  ";
+    formatter << L"tick: " << tick_count;
+    runtime->display.set_title(formatter.str().c_str());
 
-    glFlush();
-    checkError();
+    // 控制执行频率
+    DWORD sleep_time = (DWORD)std::max<float>(
+        0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
+    Sleep(sleep_time);
 }
 
 // 由渲染线程执行，加载资源
@@ -257,22 +231,20 @@ void init_render_resource() {
 
 // 渲染线程执行的代码
 void render_thread_func() {
-    std::cout << "RenderThreadStart\n";
+    std::cerr << "RenderThreadStart\n";
 
     runtime->display.bind_opengl_context();
     opengl_init();
 
-    runtime->render_clock.update();
-
+    std::cerr << "开始初始化资源\n";
     init_render_resource();
 
-    // 通知主线程资源加载完毕，可以开始初始化场景并运行逻辑帧
-    PostThreadMessageW(runtime->main_thread_id, MY_MSG_RESOURCE_INITIZED, 0, 0);
-
+    std::cerr << "渲染循环开始\n";
+    runtime->render_clock.update();
     while (!runtime->renderer.render_thread_should_exit) {
         float delta = runtime->render_clock.update();
 
-        render_frame();
+        runtime->renderer.render();
 
         runtime->fps = calculate_fps(delta);
         runtime->display.swap();
@@ -285,19 +257,12 @@ void render_thread_func() {
     std::cout << "RenderThreadExit\n";
 }
 
-const float TIME_PERTICK = 1000.0f / 60.0f;
-
-bool poll_event() {
+bool event_loop() {
     MSG msg;
-    while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-        DispatchMessage(&msg);
-        if (msg.message == WM_QUIT) {
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        DispatchMessageW(&msg);
+        if (msg.message == WM_QUIT){
             return true;
-        }
-        if (msg.message == MY_MSG_RESOURCE_INITIZED){
-            std::cout << "开始加载场景\n";
-            init_start_scene(runtime->world);
-            runtime->continue_run();//加载完场景后，逻辑帧开始执行
         }
     }
     return false;
@@ -309,23 +274,9 @@ int main(int argc, char **argv) {
         runtime->display.show(); // 必须在runtime初始化完成后再执行
 
         runtime->logic_clock.update();
-        while (!poll_event()) {
-            float delta = runtime->logic_clock.update();
-            if (!runtime->the_world_enable) {
-                tick(delta);
-            }
 
-            std::wstringstream formatter;
-            formatter << L"FPS: " << runtime->fps.load() << "  ";
-            if (runtime->the_world_enable) {
-                formatter << "(pause)";
-            }
-            runtime->display.set_title(formatter.str().c_str());
-
-            // 控制执行频率
-            DWORD sleep_time = (DWORD)std::max<float>(
-                0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
-            Sleep(sleep_time);
+        while (!event_loop()) {
+            tick();
         }
 
         runtime.reset();

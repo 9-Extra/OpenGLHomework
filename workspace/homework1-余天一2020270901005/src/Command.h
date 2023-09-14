@@ -2,12 +2,15 @@
 #include <deque>
 #include <vector>
 #include <memory>
+#include <string>
+#include <sstream>
 //任务控制系统
 
 class Command{
 public:
     virtual void invoke() = 0;//执行
     virtual void revoke() = 0;//撤销
+    virtual std::string decription() {return "没有描述的命令";};
 
     virtual ~Command() = default;
 };
@@ -39,6 +42,16 @@ public:
         for (auto it = sub_commands.rbegin(); it != sub_commands.rend(); ++it) {
             (*it)->revoke();
         }
+    }
+
+    virtual std::string decription() override{
+        std::stringstream format;
+        format << "组: {\n";
+        for(auto& c : sub_commands){
+            format << "\t" << c->decription() << "\n";
+        }
+        format << "}\n";
+        return format.str();
     }
 private:
     std::vector<std::unique_ptr<Command>> sub_commands;//按执行顺序记录

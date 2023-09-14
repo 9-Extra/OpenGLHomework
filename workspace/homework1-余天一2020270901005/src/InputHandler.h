@@ -22,7 +22,7 @@ private:
 	}
 
     //这个需要每一帧清理
-    friend void tick(float delta);
+    friend void tick();
     void clear_mouse_move(){
         mouse_delta = Vector2f(0.0f, 0.0f);
     }

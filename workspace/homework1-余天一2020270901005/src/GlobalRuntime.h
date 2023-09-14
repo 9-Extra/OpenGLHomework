@@ -17,8 +17,6 @@ public:
     std::atomic_int32_t fps;
 
     DWORD main_thread_id;
-    uint32_t window_width;
-    uint32_t window_height;
 
     Display display;
     InputHandler input;
@@ -30,8 +28,7 @@ public:
     CommandContainer command_stack;
 
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
-        : main_thread_id(GetCurrentThreadId()), window_width(width),
-          window_height(height), display(width, height), world(renderer){
+        : main_thread_id(GetCurrentThreadId()), display(width, height), world(renderer){
         renderer.start_thread();
     }
 
@@ -46,6 +43,55 @@ public:
         // 通知渲染线程退出，但是继续执行，直到渲染线程在退出时通知主线程结束消息循环
         renderer.terminal_thread();
     }
+
+    void execute_command(std::unique_ptr<Command>&& command){
+        command->invoke();
+        command_stack.push_command(std::move(command));
+    }
 };
 
 extern std::unique_ptr<GlobalRuntime> runtime;
+
+class GameObjectAppendCommand: Command{
+protected:
+    uint32_t id;
+public:
+    virtual void invoke(){
+        id = runtime->world.create_object();
+    }
+    virtual void revoke(){
+        runtime->world.kill_object(id);
+    }
+    virtual std::string decription() {return "创建物体";};
+};
+
+class GameObjectUdateCommand: Command{
+protected:
+    uint32_t id;
+    GObjectDesc before, after;
+public:
+    virtual void invoke(){
+        GObject& obj = runtime->world.objects.at(id);
+        before = obj.to_desc();
+        obj.from_desc(after);
+    }
+    virtual void revoke(){
+        GObject& obj = runtime->world.objects.at(id);
+        after = obj.to_desc();
+        obj.from_desc(before);
+    }
+    virtual std::string decription() {return "更改物体属性";};
+};
+
+class GameObjectDeleteCommand: Command{
+protected:
+    uint32_t id;
+public:
+    virtual void invoke(){
+        runtime->world.kill_object(id);
+    }
+    virtual void revoke(){
+        id = runtime->world.create_object();
+    }
+    virtual std::string decription() {return "删除物体";};
+};

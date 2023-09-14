@@ -7,7 +7,14 @@
 #include <vector>
 #include "render.h"
 #include "GuidAlloctor.h"
+#include "Command.h"
 
+struct GObjectDesc {
+    Vector3f position{0.0, 0.0, 0.0};
+    Vector3f rotation{0.0, 0.0, 0.0}; // zxy顺序
+    Vector3f scale{1.0, 1.0, 1.0};
+    std::vector<GameObjectPartDesc> parts;
+};
 class GObject final{
 public:
     void set_position(const Vector3f& position){
@@ -28,6 +35,23 @@ public:
     std::vector<GameObjectPartDesc>& set_parts(){
         is_render_dirty = true;
         return parts;
+    }
+
+    GObjectDesc to_desc(){
+        return {
+            position,
+            rotation,
+            scale,
+            parts
+        };
+    }
+
+    void from_desc(const GObjectDesc& desc){
+        position = desc.position;
+        rotation = desc.rotation;
+        scale = desc.scale;
+        parts = desc.parts;
+        is_render_dirty = true;
     }
 private:
     friend class World;
@@ -67,11 +91,23 @@ private:
 class World {
 public:
     std::unordered_map<uint32_t, GObject> objects;
-    World(Renderer& renderer): renderer(renderer) {}
+    World(Renderer& renderer): renderer(renderer) {
+        init_start_scene();
+    }
 
     uint32_t create_object(){
         uint32_t id = game_object_id_alloctor.alloc_id();
         objects.emplace(id, GObject(id));
+        return id;
+    }
+
+    uint32_t create_object(const GObjectDesc& desc){
+        uint32_t id = create_object();
+        GObject& obj = objects.at(id);
+        obj.position = desc.position;
+        obj.rotation = desc.rotation;
+        obj.scale = desc.scale;
+        obj.parts = desc.parts;
         return id;
     }
 
@@ -109,7 +145,7 @@ public:
     }
 
     CameraDesc& set_camera(){
-        is_camera_dirty = true;
+        is_camera_dirty= true;
         return camera;
     } 
 private:
@@ -117,4 +153,28 @@ private:
     CameraDesc camera;
     bool is_camera_dirty{false};
     Renderer& renderer;
+
+    void init_start_scene() {
+    {
+        CameraDesc &desc = this->set_camera();
+        desc.position = {0.0f, 0.0f, 0.0f};
+        desc.rotation = {0.0f, 0.0f, 0.0f};
+        desc.fov = 1.57f;
+        desc.near_z = 1.0f;
+        desc.far_z = 1000.0f;
+    }
+    {
+        GObject &cube = this->objects.at(this->create_object());
+        cube.set_parts().emplace_back(GameObjectPartDesc{"cube", "default"});
+        cube.set_position({0.0, 0.0, -10.0});
+    }
+
+    {
+        GObject &platform = this->objects.at(this->create_object());
+        platform.set_parts().emplace_back(
+            GameObjectPartDesc{"platform", "default"});
+        platform.set_position({0.0, -2.0, -10.0});
+        platform.set_scale({4.0, 0.1, 4.0});
+    }
+}
 };
