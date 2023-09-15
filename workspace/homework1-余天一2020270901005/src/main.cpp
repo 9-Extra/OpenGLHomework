@@ -17,13 +17,13 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     case WM_LBUTTONUP:
     case WM_RBUTTONDOWN:
     case WM_RBUTTONUP:
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
     case WM_MOUSEMOVE: {
         float xPos = (float)LOWORD(lParam);
         float yPos = (float)HIWORD(lParam);
         // debug_log("Mouse: %f ,%f\n", xPos, yPos);
-        bool l_button = wParam & MK_LBUTTON;
-        bool r_button = wParam & MK_RBUTTON;
-        runtime->input.handle_mouse_move(xPos, yPos, l_button, r_button);
+        runtime->input.handle_mouse_move(xPos, yPos, wParam);
         break;
     }
 
@@ -122,16 +122,25 @@ void opengl_init(void) {
 void handle_mouse() {
     // 左上角为(0,0)，右下角为(w,h)
     InputHandler &input = runtime->input;
+    static bool is_middle_button_down = false;
 
-    // if (input.is_left_button_down()) {
-    //     auto [dx, dy] = input.get_mouse_move().v;
-    //     //
-    //     鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
-    //     const float rotate_speed = 0.003f;
-    //     CameraDesc &desc = runtime->world.set_camera();
-    //     desc.rotation.z += dx * rotate_speed;
-    //     desc.rotation.y -= dy * rotate_speed;
-    // }
+    if (!is_middle_button_down && input.is_middle_button_down()){
+        runtime->display.grab_mouse();
+    } 
+    if (is_middle_button_down && !input.is_middle_button_down()){
+        runtime->display.release_mouse();
+    }
+
+    if (input.is_middle_button_down()) {
+        auto [dx, dy] = input.get_mouse_move().v;
+        //鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
+        const float rotate_speed = 0.003f;
+        CameraDesc &desc = runtime->world.set_camera();
+        desc.rotation.z += dx * rotate_speed;
+        desc.rotation.y -= dy * rotate_speed;
+    }
+
+    is_middle_button_down = input.is_middle_button_down();
 }
 
 void handle_keyboard(float delta) {

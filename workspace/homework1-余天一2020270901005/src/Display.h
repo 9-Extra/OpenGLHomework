@@ -45,6 +45,21 @@ public:
             assert(false);
         }
     }
+
+    void grab_mouse(){
+        while (ShowCursor(false) >= 0);
+        RECT WndRect;
+        GetCursorPos(&last_mouse_position);
+        GetWindowRect(hwnd, &WndRect);
+        ClipCursor(&WndRect);
+    }
+
+    void release_mouse(){
+        ClipCursor(NULL);
+        SetCursorPos(last_mouse_position.x, last_mouse_position.y);
+        while (ShowCursor(true) < 0);
+    }
+
     ~Display() { DestroyWindow(hwnd); }
 
 private:
@@ -52,6 +67,7 @@ private:
         WS_CAPTION | WS_SYSMENU | WS_OVERLAPPEDWINDOW;
 
     HWND hwnd;
+    POINT last_mouse_position;
 
     friend class MenuBuilder;
     // 对执行此函数的线程绑定opengl上下文

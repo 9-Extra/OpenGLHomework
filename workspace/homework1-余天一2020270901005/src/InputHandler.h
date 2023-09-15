@@ -9,8 +9,7 @@ class InputHandler {
 private:
 	Vector2f mouse_position;
     Vector2f mouse_delta;
-	bool mouse_lb;
-	bool mouse_rb;
+    WPARAM mouse_state;
 	bool keyboard[KEYCODE_MAX];
 
 	friend LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
@@ -28,18 +27,16 @@ private:
     }
 
 	void clear_mouse_state() {
-		mouse_lb = false;
-		mouse_rb = false;
+		mouse_state = 0;
 		mouse_position = Vector2f(0.5f, 0.5f);
         mouse_delta = Vector2f(0.0f, 0.0f);
 	}
 
-	void handle_mouse_move(float x, float y, bool lb, bool rb) {
+	void handle_mouse_move(float x, float y, WPARAM state) {
 		//LOG_DEBUG("Real mouse handle called!");
         mouse_delta = mouse_delta + Vector2f(x, y) - mouse_position;
 		mouse_position = Vector2f(x, y);
-		mouse_lb = lb;
-		mouse_rb = rb;
+		mouse_state = state;
 	}
 
 	void key_down(unsigned long long vk) {
@@ -70,11 +67,15 @@ public:
     }
 
 	inline bool is_left_button_down()  const {
-		return mouse_lb;
+		return mouse_state & MK_LBUTTON;
 	}
 
 	inline bool is_right_button_down()  const {
-		return mouse_rb;
+		return mouse_state & MK_RBUTTON;
+	}
+
+    inline bool is_middle_button_down()  const {
+		return mouse_state & MK_MBUTTON;
 	}
 
 	inline bool is_keydown(unsigned int key)  const {
