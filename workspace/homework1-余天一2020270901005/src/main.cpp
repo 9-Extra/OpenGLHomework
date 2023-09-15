@@ -331,8 +331,6 @@ int main(int argc, char **argv) {
         runtime = std::make_unique<GlobalRuntime>();
         runtime->display.show(); // 必须在runtime初始化完成后再执行
 
-        tick();//先tick一次，设置好swap_buffer
-
         runtime->renderer.start_thread();//启动
 
         std::vector<std::unique_ptr<ISystem>> &system_list =

@@ -49,64 +49,38 @@ public:
                     object_stack.push(world.create_object(
                         GObjectDesc{start_postion,
                                     {0.0f, 0.0f, 0.0f},
-                                    {1.0f, 1.0f, 1.0f},
+                                    {0.0f, 0.0f, 0.0f},
                                     {GameObjectPartDesc{
                                         "line", "default", GL_LINES,
-                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}}));
+                                        }}}));
                 } else if (select == SQUARE) {
                     object_stack.push(world.create_object(
                         GObjectDesc{start_postion,
                                     {0.0f, 0.0f, 0.0f},
-                                    {1.0f, 1.0f, 1.0f},
+                                    {0.0f, 0.0f, 0.0f},
                                     {GameObjectPartDesc{
                                         "plane", "default", GL_TRIANGLES,
-                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}}));
+                                        }}}));
                 } else if (select == CIRCLE){
                     object_stack.push(world.create_object(
                         GObjectDesc{start_postion,
                                     {0.0f, 0.0f, 0.0f},
-                                    {1.0f, 1.0f, 1.0f},
+                                    {0.0f, 0.0f, 0.0f},
                                     {GameObjectPartDesc{
                                         "circle", "default", GL_TRIANGLES,
-                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}}));
+                                        }}}));
                 }
 
             } else {
                 // 拖拽
                 if (select == LINE) {
-                    Matrix transform = Matrix::scale(point - start_postion);
-                    world.objects.at(object_stack.top()).set_parts()[0].model_matrix =
-                        transform;
-                } else if (select == SQUARE) {
-                    Vector3f max_corner = point;
-                    Vector3f min_corner = start_postion;
-                    if (max_corner.x < min_corner.x) {
-                        std::swap(max_corner.x, min_corner.x);
-                    }
-                    if (max_corner.y < min_corner.y) {
-                        std::swap(max_corner.y, min_corner.y);
-                    }
-                    if (max_corner.z < min_corner.z) {
-                        std::swap(max_corner.z, min_corner.z);
-                    }
-                    Matrix transform = Matrix::scale(max_corner - min_corner);
-                    world.objects.at(object_stack.top()).set_parts()[0].model_matrix =
-                        transform;
-                } else if (select == CIRCLE){
-                    Vector3f max_corner = point;
-                    Vector3f min_corner = start_postion;
-                    if (max_corner.x < min_corner.x) {
-                        std::swap(max_corner.x, min_corner.x);
-                    }
-                    if (max_corner.y < min_corner.y) {
-                        std::swap(max_corner.y, min_corner.y);
-                    }
-                    if (max_corner.z < min_corner.z) {
-                        std::swap(max_corner.z, min_corner.z);
-                    }
-                    Matrix transform = Matrix::scale(max_corner - min_corner);
-                    world.objects.at(object_stack.top()).set_parts()[0].model_matrix =
-                        transform;
+                    GObject& obj = world.objects.at(object_stack.top());
+                    obj.set_scale(point - start_postion);
+                } else if (select == SQUARE || select == CIRCLE) {
+                    Vector3f max_corner{std::max(start_postion.x, point.x), std::max(start_postion.y, point.y), std::max(start_postion.z, point.z)};
+                    Vector3f min_corner{std::min(start_postion.x, point.x), std::min(start_postion.y, point.y), std::min(start_postion.z, point.z)};
+                    GObject& obj = world.objects.at(object_stack.top());
+                    obj.set_scale(max_corner - min_corner);
                 }
             }
         }
