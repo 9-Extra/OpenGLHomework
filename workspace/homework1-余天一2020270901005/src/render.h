@@ -1,6 +1,6 @@
 #pragma once
 #include "CGmath.h"
-#include "render_aspect.h"
+#include "RenderAspect.h"
 #include <GL/glew.h>
 #include <GL/glext.h>
 #include "winapi.h"

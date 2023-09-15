@@ -1,6 +1,6 @@
 #include "GlobalRuntime.h"
-#include "assets.h"
-#include "glcontext.h"
+#include "Assests.h"
+#include "GLContext.h"
 #include <PainterSystem.h>
 #include <sstream>
 

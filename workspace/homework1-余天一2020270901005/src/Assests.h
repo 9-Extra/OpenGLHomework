@@ -1,5 +1,5 @@
 #pragma once
-#include "render_aspect.h"
+#include "RenderAspect.h"
 #include <vector>
 
 namespace Assets {

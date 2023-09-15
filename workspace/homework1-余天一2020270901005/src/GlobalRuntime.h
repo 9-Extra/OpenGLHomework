@@ -2,12 +2,12 @@
 
 #include <atomic>
 #include "winapi.h"
-#include "clock.h"
+#include "Clock.h"
 #include "World.h"
 #include "InputHandler.h"
 #include "Display.h"
 #include "Command.h"
-#include "system.h"
+#include "ISystem.h"
 
 class GlobalRuntime {
 public:
