@@ -214,6 +214,7 @@ void tick() {
     }
 
     std::wstringstream formatter;
+    formatter << MY_TITLE << "  ";
     formatter << L"FPS: " << runtime->fps.load() << "  ";
     formatter << L"tick: " << tick_count;
     runtime->display.set_title(formatter.str().c_str());

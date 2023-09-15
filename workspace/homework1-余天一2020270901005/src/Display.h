@@ -7,6 +7,8 @@
 #include <functional>
 #include <iostream>
 
+#define MY_TITLE L"2020270901005 作业1"
+
 extern LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam,
                                    LPARAM lParam);
 class Display {
@@ -37,7 +39,7 @@ public:
         RECT rect = {100, 100, 100 + (LONG)width, 100 + (LONG)height};
         AdjustWindowRectEx(&rect, WINDOW_STYLE, false, 0);
 
-        hwnd = CreateWindowExW(0, L"MyWindow", L"标题", WINDOW_STYLE, 0, 0,
+        hwnd = CreateWindowExW(0, L"MyWindow", MY_TITLE, WINDOW_STYLE, 0, 0,
                                rect.right - rect.left, rect.bottom - rect.top,
                                NULL, NULL, hInstance, nullptr);
 
