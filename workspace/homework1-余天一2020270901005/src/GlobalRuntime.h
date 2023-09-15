@@ -33,7 +33,6 @@ public:
 
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
         : main_thread_id(GetCurrentThreadId()), display(width, height), world(renderer){
-        renderer.start_thread();
     }
 
     void the_world() { the_world_enable = true; }

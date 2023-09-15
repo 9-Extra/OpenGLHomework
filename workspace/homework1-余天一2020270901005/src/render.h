@@ -3,13 +3,13 @@
 #include "render_aspect.h"
 #include <GL/glew.h>
 #include <GL/glext.h>
+#include "winapi.h"
 #include <assert.h>
 #include <iostream>
-#include <mutex>
 #include <optional>
-#include <thread>
 #include <tuple>
 #include <unordered_map>
+#include <memory>
 
 inline void checkError() {
     GLenum error;
@@ -154,10 +154,10 @@ struct RenderSwapData {
 
 struct LockedSwapData {
     RenderSwapData &data;
-    std::lock_guard<std::mutex> lock;
+    HANDLE lock;
 
-    LockedSwapData(RenderSwapData &data, std::mutex &mutx)
-        : data(data), lock(mutx, std::adopt_lock) {}
+    LockedSwapData(RenderSwapData &data, HANDLE lock)
+        : data(data), lock(lock) {}
 
     RenderSwapData *operator->() { return &data; }
 
@@ -173,6 +173,11 @@ struct LockedSwapData {
 
     void delete_game_object(const uint32_t id) {
         data.game_object_to_delete.push_back(id);
+    }
+
+    ~LockedSwapData(){
+        bool r = ReleaseMutex(lock);
+        assert(r);
     }
 };
 
@@ -223,14 +228,20 @@ struct RenderScene {
     }
 };
 
-extern void render_thread_func();
+extern DWORD WINAPI render_thread_func( LPVOID lpParam );
 class Renderer {
 public:
-    Renderer() {}
+    Renderer() {
+        swap_data_lock = CreateMutex(NULL, 0, NULL);
+        if (swap_data_lock == NULL){
+            std::cerr << "创建互斥锁失败: " << GetLastError() << std::endl;
+            exit(-1);
+        }
+    }
 
     LockedSwapData get_logic_swap_data() {
         // 构造LockedSwapData会自动加锁，析构自动解锁
-        swap_data_lock.lock();
+        WaitForSingleObject(swap_data_lock, INFINITE);
         return LockedSwapData(swap_data[0], swap_data_lock);
     }
 
@@ -276,9 +287,18 @@ public:
     void do_swap() {
         // 由渲染线程调用
         swap_data[1].clear();
-        {
-            std::lock_guard<std::mutex> lock(swap_data_lock);
-            std::swap(swap_data[0], swap_data[1]);
+        WaitForSingleObject(swap_data_lock, INFINITE);
+        std::swap(swap_data[0], swap_data[1]);
+        bool r = ReleaseMutex(swap_data_lock);
+        assert(r);
+    }
+
+    void start_thread() {
+        assert(render_thread == NULL);
+        render_thread = CreateThread(NULL, 0, render_thread_func, nullptr, 0, nullptr);
+        if (render_thread == NULL){
+            std::cerr << "创建渲染线程失败" << std::endl;
+            exit(-1);
         }
     }
 
@@ -287,14 +307,18 @@ public:
     ~Renderer() {
         if (!render_thread_should_exit) {
             std::cerr << "渲染线程意外退出！！！" << std::endl;
+            exit(-1);
         }
-        render_thread.join();
+        assert(GetCurrentThreadId() != GetThreadId(render_thread));
+        WaitForSingleObject(render_thread, INFINITE);
+
+        CloseHandle(swap_data_lock);
     }
 
 private:
     friend class GlobalRuntime;
     friend void init_render_resource();
-    std::thread render_thread;
+    HANDLE render_thread{NULL};
     /*
     由渲染线程和逻辑线程访问，一个只能访问对应的那一个
     再渲染线程完成一次渲染后，会进行交换以访问下一帧的数据，但是此时
@@ -305,7 +329,7 @@ private:
     对于逻辑线程，再完成逻辑的同时填充swap_data，在每次需要向其中添加数据时，加锁
     逻辑线程不管交换和释放，但写数据时的加锁时间尽量短，因为可能阻塞渲染线程
     */
-    std::mutex swap_data_lock;
+    HANDLE swap_data_lock;
     RenderSwapData swap_data[2];
 
     RenderScene scene;
@@ -318,10 +342,6 @@ private:
         GLsizei height;
     } target_viewport;
     bool viewport_updated{false};
-
-    void start_thread() {
-         render_thread = std::thread(render_thread_func);
-    }
 
     void terminal_thread() {
         assert(!render_thread_should_exit);

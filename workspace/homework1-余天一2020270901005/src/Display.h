@@ -13,12 +13,8 @@ class Display {
 public:
     void show() { ShowWindow(hwnd, SW_SHOW); }
     void set_title(LPCWSTR title) { SetWindowTextW(hwnd, title); }
-
-    void swap() {
-        if (!SwapBuffers(hdc)) {
-            std::cerr << "交换前后缓冲失败\n";
-            exit(-1);
-        }
+    HWND get_hwnd(){
+        return hwnd;
     }
 
     Display(uint32_t width, uint32_t height) {
@@ -55,70 +51,10 @@ private:
     static const DWORD WINDOW_STYLE =
         WS_CAPTION | WS_SYSMENU | WS_OVERLAPPEDWINDOW;
 
-    HDC hdc;
     HWND hwnd;
-    HGLRC hglrc{NULL};
 
-    friend void opengl_init(void);
-    friend void render_thread_func();
     friend class MenuBuilder;
     // 对执行此函数的线程绑定opengl上下文
-    void bind_opengl_context() {
-        assert(hglrc == NULL);
-        hdc = GetDC(hwnd);
-
-        PIXELFORMATDESCRIPTOR pfd = {
-            sizeof(PIXELFORMATDESCRIPTOR), // size of this pfd
-            1,                             // version number
-            PFD_DRAW_TO_WINDOW |           // support window
-                PFD_SUPPORT_OPENGL |       // support OpenGL
-                PFD_DOUBLEBUFFER,          // double buffered
-            PFD_TYPE_RGBA,                 // RGBA type
-            24,                            // 24-bit color depth
-            0,
-            0,
-            0,
-            0,
-            0,
-            0, // color bits ignored
-            0, // no alpha buffer
-            0, // shift bit ignored
-            0, // no accumulation buffer
-            0,
-            0,
-            0,
-            0,              // accum bits ignored
-            24,             // 24-bit z-buffer
-            8,              // stencil buffer
-            0,              // no auxiliary buffer
-            PFD_MAIN_PLANE, // main layer
-            0,              // reserved
-            0,
-            0,
-            0 // layer masks ignored
-        };
-
-        int iPixelFormat = ChoosePixelFormat(hdc, &pfd);
-
-        // make that the pixel format of the device context
-        SetPixelFormat(hdc, iPixelFormat, &pfd);
-
-        // create a rendering context
-        hglrc = wglCreateContext(hdc);
-        if (hglrc == NULL) {
-            exit(-1);
-        }
-
-        // make it the calling thread's current rendering context
-        if (!wglMakeCurrent(hdc, hglrc)) {
-            exit(-1);
-        }
-    }
-
-    void delete_opengl_context() {
-        wglMakeCurrent(NULL, NULL);
-        wglDeleteContext(hglrc);
-    }
 };
 class MenuManager {
 public:

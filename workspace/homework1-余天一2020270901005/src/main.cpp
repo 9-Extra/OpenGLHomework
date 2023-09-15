@@ -1,7 +1,9 @@
 #include "GlobalRuntime.h"
 #include "assets.h"
-#include <sstream>
+#include "glcontext.h"
 #include <PainterSystem.h>
+#include <sstream>
+
 
 std::unique_ptr<GlobalRuntime> runtime;
 
@@ -63,8 +65,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_COMMAND: {
-        if (HIWORD(wParam) == 0){
-            //来自目录点击的信息
+        if (HIWORD(wParam) == 0) {
+            // 来自目录点击的信息
             runtime->menu.on_click(LOWORD(wParam));
         }
         break;
@@ -78,7 +80,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     case WM_SIZE: {
         runtime->world.window_width = LOWORD(lParam);
         runtime->world.window_height = HIWORD(lParam);
-        runtime->renderer.set_target_viewport(0, 0, LOWORD(lParam), HIWORD(lParam));
+        runtime->renderer.set_target_viewport(0, 0, LOWORD(lParam),
+                                              HIWORD(lParam));
         break;
     }
 
@@ -110,7 +113,7 @@ void opengl_init(void) {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);//逆时针的面为正面
+    glFrontFace(GL_CCW); // 逆时针的面为正面
     glDepthFunc(GL_LESS);
 
     checkError();
@@ -122,7 +125,8 @@ void handle_mouse() {
 
     // if (input.is_left_button_down()) {
     //     auto [dx, dy] = input.get_mouse_move().v;
-    //     // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
+    //     //
+    //     鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
     //     const float rotate_speed = 0.003f;
     //     CameraDesc &desc = runtime->world.set_camera();
     //     desc.rotation.z += dx * rotate_speed;
@@ -179,15 +183,16 @@ void tick() {
     static uint32_t tick_count = 0;
     float delta = runtime->logic_clock.update();
     if (!runtime->the_world_enable) {
-        //std::cerr << "start tick: " << tick_count << std::endl;
+        // std::cerr << "start tick: " << tick_count << std::endl;
         tick_count++;
         handle_mouse();
         handle_keyboard(delta);
 
-        std::vector<std::unique_ptr<ISystem>>& system_list = runtime->system_list;
-        for(size_t i = 0;i < system_list.size();i++){
+        std::vector<std::unique_ptr<ISystem>> &system_list =
+            runtime->system_list;
+        for (size_t i = 0; i < system_list.size(); i++) {
             system_list[i]->tick();
-            if (system_list[i]->delete_me()){
+            if (system_list[i]->delete_me()) {
                 std::swap(system_list[i], system_list.back());
                 system_list.pop_back();
             }
@@ -215,7 +220,8 @@ void init_render_resource() {
                    (uint32_t)Assets::cube_indices.size()};
     resource.add_mesh("cube", std::move(cube_mesh));
 
-    Mesh platform_mesh{Assets::platform_vertices.data(), Assets::cube_indices.data(),
+    Mesh platform_mesh{Assets::platform_vertices.data(),
+                       Assets::cube_indices.data(),
                        (uint32_t)Assets::cube_indices.size()};
 
     resource.add_mesh("platform", std::move(platform_mesh));
@@ -227,48 +233,41 @@ void init_render_resource() {
     PhongMaterial default_material{{1.0f, 1.0f, 1.0f}, 15.0f};
     resource.add_material("default", std::move(default_material));
 
-    Mesh line_mesh{
-        Assets::line_vertices.data(),
-        Assets::line_indices.data(),
-        (uint32_t)Assets::line_indices.size()
-    };
+    Mesh line_mesh{Assets::line_vertices.data(), Assets::line_indices.data(),
+                   (uint32_t)Assets::line_indices.size()};
     resource.add_mesh("line", std::move(line_mesh));
 
-    Mesh plane_mesh{
-        Assets::plane_vertices.data(),
-        Assets::plane_indices.data(),
-        (uint32_t)Assets::plane_indices.size()
-    };
+    Mesh plane_mesh{Assets::plane_vertices.data(), Assets::plane_indices.data(),
+                    (uint32_t)Assets::plane_indices.size()};
     resource.add_mesh("plane", std::move(plane_mesh));
 
-    //生产circle的顶点
+    // 生产circle的顶点
     std::vector<Vertex> circle_vertices(101);
-    //中心点为{0, 0, 0}，半径为1，100边型，101个顶点
-    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}};//中心点
-    for(size_t i = 1;i < 101;i++){
+    // 中心点为{0, 0, 0}，半径为1，100边型，101个顶点
+    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}; // 中心点
+    for (size_t i = 1; i < 101; i++) {
         float angle = to_radian(360.0f / 100 * (i - 1));
-        circle_vertices[i] = { {sinf(angle), cosf(angle), 0.0f}, {sinf(angle) / 2 + 1, cosf(angle)  / 2 + 1, float(i) / 100}};
+        circle_vertices[i] = {
+            {sinf(angle), cosf(angle), 0.0f},
+            {sinf(angle) / 2 + 1, cosf(angle) / 2 + 1, float(i) / 100}};
     }
 
-    std::vector<unsigned int> circle_indices(300);//100个三角形
-    for(size_t i = 0;i <= 99;i++){//前99个
-        //逆时针
+    std::vector<unsigned int> circle_indices(300); // 100个三角形
+    for (size_t i = 0; i <= 99; i++) {             // 前99个
+        // 逆时针
         circle_indices[i * 3] = 0;
         circle_indices[i * 3 + 1] = i + 2;
         circle_indices[i * 3 + 2] = i + 1;
     }
-    //最后一个
+    // 最后一个
     circle_indices[297] = 0;
     circle_indices[298] = 1;
     circle_indices[299] = 100;
 
-    Mesh circle_mesh{
-        circle_vertices.data(),
-        circle_indices.data(),
-        (uint32_t)circle_indices.size()
-    };
+    Mesh circle_mesh{circle_vertices.data(), circle_indices.data(),
+                     (uint32_t)circle_indices.size()};
 
-    struct MeshResouce: ResouceItem{
+    struct MeshResouce : ResouceItem {
         std::vector<Vertex> circle_vertices;
         std::vector<unsigned int> circle_indices;
     } stroage;
@@ -281,38 +280,37 @@ void init_render_resource() {
 }
 
 // 渲染线程执行的代码
-void render_thread_func() {
-    std::cerr << "RenderThreadStart\n";
+DWORD WINAPI render_thread_func(LPVOID lpParam) {
+    {
+        OpenglContext context(runtime->display.get_hwnd());
 
-    runtime->display.bind_opengl_context();
-    opengl_init();
+        opengl_init();
 
-    std::cerr << "开始初始化资源\n";
-    init_render_resource();
+        std::cerr << "开始初始化资源\n";
+        init_render_resource();
 
-    std::cerr << "渲染循环开始\n";
-    runtime->render_clock.update();
-    while (!runtime->renderer.render_thread_should_exit) {
-        float delta = runtime->render_clock.update();
+        std::cerr << "渲染循环开始\n";
+        runtime->render_clock.update();
+        while (!runtime->renderer.render_thread_should_exit) {
+            float delta = runtime->render_clock.update();
 
-        runtime->renderer.render();
+            runtime->renderer.render();
 
-        runtime->fps = calculate_fps(delta);
-        runtime->display.swap();
+            runtime->fps = calculate_fps(delta);
+            context.swap();
+        }
     }
-
-    runtime->display.delete_opengl_context();
 
     PostThreadMessageW(runtime->main_thread_id, WM_QUIT, 0,
                        0); // 通知主线程退出消息循环
-    std::cout << "RenderThreadExit\n";
+    return 0;
 }
 
 bool event_loop() {
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
         DispatchMessageW(&msg);
-        if (msg.message == WM_QUIT){
+        if (msg.message == WM_QUIT) {
             return true;
         }
     }
@@ -324,9 +322,14 @@ int main(int argc, char **argv) {
         runtime = std::make_unique<GlobalRuntime>();
         runtime->display.show(); // 必须在runtime初始化完成后再执行
 
-        std::vector<std::unique_ptr<ISystem>>& system_list = runtime->system_list;
+        tick();//先tick一次，设置好swap_buffer
+
+        runtime->renderer.start_thread();//启动
+
+        std::vector<std::unique_ptr<ISystem>> &system_list =
+            runtime->system_list;
         system_list.emplace_back(std::make_unique<PainterSystem>());
-        for(size_t i = 0;i < system_list.size();i++){
+        for (size_t i = 0; i < system_list.size(); i++) {
             system_list[i]->init();
         }
 
