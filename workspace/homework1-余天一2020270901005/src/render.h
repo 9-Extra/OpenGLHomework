@@ -11,7 +11,6 @@
 #include <tuple>
 #include <unordered_map>
 
-
 inline void checkError() {
     GLenum error;
     while ((error = glGetError()) != GL_NO_ERROR) {
@@ -36,7 +35,6 @@ inline unsigned int calculate_fps(float delta_time) {
 struct CameraDesc {
     Vector3f position;
     Vector3f rotation;
-    uint32_t window_width, window_height;
     float fov, far_z, near_z;
 };
 
@@ -48,7 +46,8 @@ struct GameObjectPartDesc {
 
     GameObjectPartDesc(const std::string &resource_key_mesh = "default",
                        const std::string &resource_key_material = "default",
-                       uint32_t topology = GL_TRIANGLES, const Matrix &model_matrix = Matrix::identity())
+                       uint32_t topology = GL_TRIANGLES,
+                       const Matrix &model_matrix = Matrix::identity())
         : resource_key_mesh(resource_key_mesh),
           resource_key_material(resource_key_material), topology(topology),
           model_matrix(model_matrix) {}
@@ -82,7 +81,7 @@ struct LightDesc {
     float identity;
 };
 
-struct ResouceItem{
+struct ResouceItem {
     virtual ~ResouceItem() = default;
 };
 class RenderReousce {
@@ -123,10 +122,9 @@ public:
     const PhongMaterial &get_material(uint32_t id) {
         return material_container[id];
     }
-    
-    //保存在退出时释放
-    template<class T>
-    void add_raw_resource(T&& item){
+
+    // 保存在退出时释放
+    template <class T> void add_raw_resource(T &&item) {
         pool.emplace_back(std::make_unique<T>(std::move(item)));
     }
 
@@ -137,7 +135,7 @@ private:
     std::unordered_map<std::string, uint32_t> material_look_up;
     std::vector<PhongMaterial> material_container;
 
-    std::vector<std::unique_ptr<ResouceItem>> pool;//保存在这里以析构释放资源
+    std::vector<std::unique_ptr<ResouceItem>> pool; // 保存在这里以析构释放资源
 };
 
 struct RenderSwapData {
@@ -171,9 +169,7 @@ struct LockedSwapData {
         data.light_desc.emplace_back(desc);
     }
 
-    void set_camera(const CameraDesc &desc) {
-        data.camera_desc.emplace(desc); 
-    }
+    void set_camera(const CameraDesc &desc) { data.camera_desc.emplace(desc); }
 
     void delete_game_object(const uint32_t id) {
         data.game_object_to_delete.push_back(id);
@@ -183,8 +179,6 @@ struct LockedSwapData {
 struct RenderScene {
     Camera main_camera;
     std::unordered_map<GameObjectPartId, RenderItem> item_list;
-    uint32_t window_width;
-    uint32_t window_height;
 
     void update(RenderReousce &resources, const RenderSwapData &swap_data) {
 
@@ -192,10 +186,9 @@ struct RenderScene {
             const CameraDesc &desc = swap_data.camera_desc.value();
             main_camera.position = desc.position;
             main_camera.rotation = desc.rotation;
-            window_width = desc.window_width;
-            window_height = desc.window_height;
-            main_camera.set_view_perspective_matrix(float(desc.window_width) / float(desc.window_height), desc.fov,
-                                                    desc.near_z, desc.far_z);
+            main_camera.fov = desc.fov;
+            main_camera.near_z = desc.near_z;
+            main_camera.far_z = desc.far_z;
         }
 
         // 先更新Object再删除，防止删除的Object因为更新而重新加入
@@ -241,16 +234,20 @@ public:
         return LockedSwapData(swap_data[0], swap_data_lock);
     }
 
+    void set_target_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
+        target_viewport = {x, y, width, height};
+        scene.main_camera.aspect = float(width) / float(height);
+    }
+
     void render() {
         scene.update(resouces, swap_data[1]);
 
-        glDrawBuffer(GL_BACK);//渲染到后缓冲区
-        glViewport(0, 0, scene.window_width, scene.window_height);
+        glDrawBuffer(GL_BACK); // 渲染到后缓冲区
+        glViewport(target_viewport.x, target_viewport.y, target_viewport.width, target_viewport.height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glMatrixMode(GL_PROJECTION);
-        glLoadMatrixf(
-            scene.main_camera.view_perspective_matrix.transpose().data());
+        glLoadMatrixf(scene.main_camera.get_view_perspective_matrix().transpose().data());
 
         glMatrixMode(GL_MODELVIEW);
         for (const auto &[id, item] : scene.item_list) {
@@ -262,7 +259,7 @@ public:
 
             glLoadMatrixf(item.model_matrix.transpose().data());
             glBegin(item.topology);
-            for (uint32_t i = 0;i < mesh.indices_count;i++) {
+            for (uint32_t i = 0; i < mesh.indices_count; i++) {
                 const Vertex &v = mesh.vertices[mesh.indices[i]];
                 glColor3fv(v.color.data());
                 glVertex3fv(v.position.data());
@@ -272,7 +269,7 @@ public:
 
         glFlush();
         checkError();
-        
+
         do_swap();
     }
 
@@ -288,7 +285,7 @@ public:
     bool render_thread_should_exit{false};
 
     ~Renderer() {
-        if (!render_thread_should_exit){
+        if (!render_thread_should_exit) {
             std::cerr << "渲染线程意外退出！！！" << std::endl;
         }
         render_thread.join();
@@ -314,7 +311,17 @@ private:
     RenderScene scene;
     RenderReousce resouces;
 
-    void start_thread() { render_thread = std::thread(render_thread_func); }
+    struct Viewport {
+        GLint x;
+        GLint y;
+        GLsizei width;
+        GLsizei height;
+    } target_viewport;
+    bool viewport_updated{false};
+
+    void start_thread() {
+         render_thread = std::thread(render_thread_func);
+    }
 
     void terminal_thread() {
         assert(!render_thread_should_exit);

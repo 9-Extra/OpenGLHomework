@@ -51,9 +51,10 @@ struct Camera {
 public:
     Camera() {}
     
-    Matrix view_perspective_matrix;
     Vector3f position;
     Vector3f rotation; // zxy
+    float aspect;
+    float fov, near_z, far_z;
 
     // 获取目视方向
     Vector3f get_orientation() const {
@@ -62,8 +63,8 @@ public:
         return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
     }
 
-    void set_view_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
-        view_perspective_matrix = compute_perspective_matrix(ratio, fov, near_z, far_z) *
+    Matrix get_view_perspective_matrix() const{
+        return compute_perspective_matrix(aspect, fov, near_z, far_z) *
             Matrix::rotate(rotation).transpose() *
             Matrix::translate(-position);
     }

@@ -90,6 +90,7 @@ private:
 
 class World {
 public:
+    uint32_t window_width,window_height; 
     std::unordered_map<uint32_t, GObject> objects;
     World(Renderer& renderer): renderer(renderer) {
         init_start_scene();
@@ -154,8 +155,8 @@ public:
 
     //获取屏幕上的一点对应的射线方向
     Vector3f get_screen_point_oritation(Vector2f screen_xy) const{
-        float w_w = float(camera.window_width);
-        float w_h = float(camera.window_height);
+        float w_w = float(window_width);
+        float w_h = float(window_height);
         Vector3f camera_up = get_camera_up();
         Vector3f camera_forward = get_camera_oritation();
         Vector3f camera_right = camera_forward.cross(camera_up);
