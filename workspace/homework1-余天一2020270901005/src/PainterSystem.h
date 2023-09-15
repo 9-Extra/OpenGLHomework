@@ -1,52 +1,33 @@
 #pragma once
 #include "GlobalRuntime.h"
+#include <stack>
 
 class PainterSystem : public ISystem {
 private:
     bool is_mouse_left_down = false;
     Vector3f start_postion;
-    uint32_t object_id;
+    std::stack<uint32_t> object_stack;
     enum Select { LINE, SQUARE, CIRCLE } select = LINE;
-    std::vector<uint32_t> menu_ids;
 
 public:
     void init() override {
-        menu_ids.push_back(runtime->display.append_menu_item(
-            MF_CHECKED | MF_STRING, L"画直线", [&](uint32_t id) {
-                if (!runtime->input.is_right_button_down()) {
-                    select = LINE;
-                    runtime->display.modify_menu_item(
-                        menu_ids[0], MF_CHECKED | MF_STRING, L"画直线");
-                    runtime->display.modify_menu_item(menu_ids[1], MF_STRING,
-                                                      L"画方形");
-                    runtime->display.modify_menu_item(menu_ids[2], MF_STRING,
-                                                      L"画圆");
-                }
-            }));
-        menu_ids.push_back(runtime->display.append_menu_item(
-            MF_STRING, L"画方形", [&](uint32_t id) {
-                if (!runtime->input.is_right_button_down()) {
-                    select = SQUARE;
-                    runtime->display.modify_menu_item(menu_ids[0], MF_STRING,
-                                                      L"画直线");
-                    runtime->display.modify_menu_item(
-                        menu_ids[1], MF_CHECKED | MF_STRING, L"画方形");
-                    runtime->display.modify_menu_item(menu_ids[2], MF_STRING,
-                                                      L"画圆");
-                }
-            }));
-        menu_ids.push_back(runtime->display.append_menu_item(
-            MF_STRING, L"画圆", [&](uint32_t id) {
-                if (!runtime->input.is_right_button_down()) {
-                    select = CIRCLE;
-                    runtime->display.modify_menu_item(menu_ids[0], MF_STRING,
-                                                      L"画直线");
-                    runtime->display.modify_menu_item(menu_ids[1], MF_STRING,
-                                                      L"画方形");
-                    runtime->display.modify_menu_item(
-                        menu_ids[2], MF_CHECKED | MF_STRING, L"画圆");
-                }
-            }));
+        runtime->menu.add_item("painter", [&](MenuManager::MenuBuilder& builder){
+            builder.set_menu(object_stack.empty() ? (MF_DISABLED | MF_GRAYED) : 0 | MF_STRING, L"撤销", [&]{
+                runtime->world.kill_object(object_stack.top());
+                object_stack.pop();
+            });
+            builder.set_menu(MF_SEPARATOR, L"", []{});//分割线
+            
+            builder.set_menu( select == LINE ? MF_CHECKED : 0 | MF_STRING, L"线段", [&]{
+                if (!is_mouse_left_down) select = LINE;
+            });
+            builder.set_menu( select == SQUARE ? MF_CHECKED : 0 | MF_STRING, L"矩形", [&]{
+                if (!is_mouse_left_down) select = SQUARE;
+            });
+            builder.set_menu( select == CIRCLE ? MF_CHECKED : 0 | MF_STRING, L"圆", [&]{
+                if (!is_mouse_left_down) select = CIRCLE;
+            });
+        });
     }
 
     void tick() override {
@@ -65,44 +46,67 @@ public:
                 start_postion = point;
 
                 if (select == LINE) {
-                    object_id = world.create_object(
+                    object_stack.push(world.create_object(
                         GObjectDesc{start_postion,
                                     {0.0f, 0.0f, 0.0f},
                                     {1.0f, 1.0f, 1.0f},
                                     {GameObjectPartDesc{
                                         "line", "default", GL_LINES,
-                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}});
+                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}}));
                 } else if (select == SQUARE) {
-                    object_id = world.create_object(
+                    object_stack.push(world.create_object(
                         GObjectDesc{start_postion,
                                     {0.0f, 0.0f, 0.0f},
                                     {1.0f, 1.0f, 1.0f},
                                     {GameObjectPartDesc{
                                         "plane", "default", GL_TRIANGLES,
-                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}});
+                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}}));
+                } else if (select == CIRCLE){
+                    object_stack.push(world.create_object(
+                        GObjectDesc{start_postion,
+                                    {0.0f, 0.0f, 0.0f},
+                                    {1.0f, 1.0f, 1.0f},
+                                    {GameObjectPartDesc{
+                                        "circle", "default", GL_TRIANGLES,
+                                        Matrix::scale({0.0f, 0.0f, 0.0f})}}}));
                 }
 
             } else {
                 // 拖拽
-                if (select == LINE){
+                if (select == LINE) {
                     Matrix transform = Matrix::scale(point - start_postion);
-                    world.objects.at(object_id).set_parts()[0].model_matrix =
-                    transform;
-                } else if (select == SQUARE){
+                    world.objects.at(object_stack.top()).set_parts()[0].model_matrix =
+                        transform;
+                } else if (select == SQUARE) {
                     Vector3f max_corner = point;
                     Vector3f min_corner = start_postion;
-                    if (max_corner.x < min_corner.x){
+                    if (max_corner.x < min_corner.x) {
                         std::swap(max_corner.x, min_corner.x);
                     }
-                    if (max_corner.y < min_corner.y){
+                    if (max_corner.y < min_corner.y) {
                         std::swap(max_corner.y, min_corner.y);
                     }
-                    if (max_corner.z < min_corner.z){
+                    if (max_corner.z < min_corner.z) {
                         std::swap(max_corner.z, min_corner.z);
                     }
                     Matrix transform = Matrix::scale(max_corner - min_corner);
-                    world.objects.at(object_id).set_parts()[0].model_matrix =
-                    transform;
+                    world.objects.at(object_stack.top()).set_parts()[0].model_matrix =
+                        transform;
+                } else if (select == CIRCLE){
+                    Vector3f max_corner = point;
+                    Vector3f min_corner = start_postion;
+                    if (max_corner.x < min_corner.x) {
+                        std::swap(max_corner.x, min_corner.x);
+                    }
+                    if (max_corner.y < min_corner.y) {
+                        std::swap(max_corner.y, min_corner.y);
+                    }
+                    if (max_corner.z < min_corner.z) {
+                        std::swap(max_corner.z, min_corner.z);
+                    }
+                    Matrix transform = Matrix::scale(max_corner - min_corner);
+                    world.objects.at(object_stack.top()).set_parts()[0].model_matrix =
+                        transform;
                 }
             }
         }
@@ -115,8 +119,6 @@ public:
     }
 
     ~PainterSystem() {
-        for (uint32_t id : menu_ids) {
-            runtime->display.delete_menu_item(id);
-        }
+        runtime->menu.remove_item("painter");
     }
 };

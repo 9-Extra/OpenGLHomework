@@ -82,6 +82,9 @@ struct LightDesc {
     float identity;
 };
 
+struct ResouceItem{
+    virtual ~ResouceItem() = default;
+};
 class RenderReousce {
 public:
     uint32_t find_material(const std::string &key) {
@@ -120,6 +123,12 @@ public:
     const PhongMaterial &get_material(uint32_t id) {
         return material_container[id];
     }
+    
+    //保存在退出时释放
+    template<class T>
+    void add_raw_resource(T&& item){
+        pool.emplace_back(std::make_unique<T>(std::move(item)));
+    }
 
 private:
     std::unordered_map<std::string, uint32_t> mesh_look_up;
@@ -127,6 +136,8 @@ private:
 
     std::unordered_map<std::string, uint32_t> material_look_up;
     std::vector<PhongMaterial> material_container;
+
+    std::vector<std::unique_ptr<ResouceItem>> pool;//保存在这里以析构释放资源
 };
 
 struct RenderSwapData {
@@ -251,8 +262,8 @@ public:
 
             glLoadMatrixf(item.model_matrix.transpose().data());
             glBegin(item.topology);
-            for (unsigned int i : mesh.indices) {
-                const Vertex &v = mesh.vertices[i];
+            for (uint32_t i = 0;i < mesh.indices_count;i++) {
+                const Vertex &v = mesh.vertices[mesh.indices[i]];
                 glColor3fv(v.color.data());
                 glVertex3fv(v.position.data());
             }

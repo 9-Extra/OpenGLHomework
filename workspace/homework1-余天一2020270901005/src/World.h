@@ -199,7 +199,14 @@ private:
             {GameObjectPartDesc{"cube", "default"}}
         });
     }
-
+    {
+        create_object(GObjectDesc{
+            {0.0f, 10.0f, -10.0f},
+            {0.0f, 0.0f, 0.0f},
+            {5.0f, 5.0f, 5.0f},
+            {GameObjectPartDesc{"plane", "default"}}
+        });
+    }
     {
         GObject &platform = this->objects.at(this->create_object());
         platform.set_parts().emplace_back(

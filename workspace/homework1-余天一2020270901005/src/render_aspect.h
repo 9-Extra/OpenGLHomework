@@ -37,8 +37,8 @@ struct DirectionalLight{
 };
 
 struct Mesh{
-    const std::vector<Vertex> vertices;
-    const std::vector<uint32_t> indices;
+    const Vertex* vertices;
+    const uint32_t* indices;
     const uint32_t indices_count;
 };
 

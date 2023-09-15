@@ -1,50 +1,21 @@
 #pragma once
 
+#include "GuidAlloctor.h"
 #include "winapi.h"
 #include <assert.h>
 #include <cstdint>
-#include <iostream>
-#include "GuidAlloctor.h"
 #include <functional>
+#include <iostream>
 
 extern LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam,
                                    LPARAM lParam);
-
-using MenuCallBack = std::function<void(uint32_t)>;
 class Display {
 public:
     void show() { ShowWindow(hwnd, SW_SHOW); }
     void set_title(LPCWSTR title) { SetWindowTextW(hwnd, title); }
 
-    uint32_t append_menu_item(UINT flag, LPCWSTR name, MenuCallBack callback){
-        uint32_t id = menu_item_id_alloctor.alloc_id();
-        AppendMenuW(popup_menu, flag, id, name);
-        menu_callback_list.emplace(id, callback);
-        return id;
-    }
-    void modify_menu_item(uint32_t id, UINT flag, LPCWSTR name){
-        ModifyMenuW(popup_menu, id, MF_BYCOMMAND | flag, id, name);
-    }
-
-    void delete_menu_item(uint32_t id){
-        DeleteMenu(popup_menu, id, MF_BYCOMMAND);
-        menu_callback_list.erase(id);
-        menu_item_id_alloctor.free_id(id);
-    }
-
-    int get_menu_item_count(){
-        return GetMenuItemCount(popup_menu);
-    }
-
-    void display_pop_menu(WPARAM lParam){
-        TrackPopupMenu(popup_menu, 0, LOWORD(lParam),HIWORD(lParam), 0, hwnd, NULL);
-    }
-    void on_menu_click(uint32_t id){
-        menu_callback_list.at(id)(id);
-    }
-
     void swap() {
-        if (!SwapBuffers (hdc)) {
+        if (!SwapBuffers(hdc)) {
             std::cerr << "交换前后缓冲失败\n";
             exit(-1);
         }
@@ -67,7 +38,7 @@ public:
                                           NULL};
 
         RegisterClassExW(&window_class);
-        RECT rect = {100, 100, 100 + (LONG)width, 100 +(LONG)height};
+        RECT rect = {100, 100, 100 + (LONG)width, 100 + (LONG)height};
         AdjustWindowRectEx(&rect, WINDOW_STYLE, false, 0);
 
         hwnd = CreateWindowExW(0, L"MyWindow", L"标题", WINDOW_STYLE, 0, 0,
@@ -77,13 +48,8 @@ public:
         if (hwnd == NULL) {
             assert(false);
         }
-
-        popup_menu = CreatePopupMenu();
     }
-    ~Display() {
-        DestroyMenu(popup_menu);
-        DestroyWindow(hwnd); 
-    }
+    ~Display() { DestroyWindow(hwnd); }
 
 private:
     static const DWORD WINDOW_STYLE =
@@ -91,13 +57,11 @@ private:
 
     HDC hdc;
     HWND hwnd;
-    HMENU popup_menu;
-    GuidAlloctor menu_item_id_alloctor;
-    std::unordered_map<uint32_t, MenuCallBack> menu_callback_list;
     HGLRC hglrc{NULL};
 
     friend void opengl_init(void);
     friend void render_thread_func();
+    friend class MenuBuilder;
     // 对执行此函数的线程绑定opengl上下文
     void bind_opengl_context() {
         assert(hglrc == NULL);
@@ -155,5 +119,71 @@ private:
         wglMakeCurrent(NULL, NULL);
         wglDeleteContext(hglrc);
     }
-    
+};
+class MenuManager {
+public:
+    using MenuClickCallBack = std::function<void()>;
+    class MenuBuilder {
+        //隐藏MenuManager的太多函数
+    public:
+        //唯一的功能：创建菜单项
+        void set_menu(UINT flag, LPCWSTR name, std::function<void()> on_click) {
+            uint32_t id = click_list.size();
+            click_list.emplace_back(on_click);
+            AppendMenuW(h_menu, flag, id, name);
+        }
+    private:
+        HMENU h_menu;
+        std::vector<MenuClickCallBack> &click_list;
+
+        friend class MenuManager;
+        MenuBuilder(HMENU h_menu,
+                    std::vector<MenuClickCallBack> &click_list)
+            : h_menu(h_menu), click_list(click_list) {}
+    };
+    using MenuBuildCallBack = std::function<void(MenuBuilder&)>;
+
+    void add_item(const std::string& key, MenuBuildCallBack build_callback){
+        menu_build_list.emplace(key, build_callback);
+    }
+
+    void remove_item(const std::string& key){
+        menu_build_list.erase(key);
+    }
+
+private:
+    HMENU h_menu;
+    std::unordered_map<std::string, MenuBuildCallBack> menu_build_list;
+    std::vector<MenuClickCallBack> click_list;
+
+    friend class GlobalRuntime;
+    friend LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam);
+    MenuManager() { h_menu = CreatePopupMenu(); }
+    ~MenuManager() { DestroyMenu(h_menu); }
+
+    void display_pop_menu(HWND hwnd, WORD x, WORD y) {
+        on_close_pop_menu();//在下次显示菜单时才清空上次的项
+
+        MenuBuilder builder(h_menu, click_list);
+        for (auto& [_, func] : menu_build_list) {
+            func(builder);
+        }
+        TrackPopupMenu(h_menu, 0, x, y, 0, hwnd, NULL);
+    }
+
+    void on_close_pop_menu() {
+        // 清空所有目录项
+        int count = GetMenuItemCount(h_menu);
+        if (count == -1){
+            std::cerr << "获取菜单项个数失败: " << GetLastError() << std::endl;
+            exit(-1);
+        }
+        for (int i = 0; i < count; i++) {
+            DeleteMenu(h_menu, (UINT)i, MF_BYCOMMAND);
+        }
+        assert(GetMenuItemCount(h_menu) == 0);
+        click_list.clear();
+    }
+
+    void on_click(WORD id) { click_list[id](); }
 };

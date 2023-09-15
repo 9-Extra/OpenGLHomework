@@ -6,6 +6,7 @@
 #include <sstream>
 //任务控制系统
 
+
 class Command{
 public:
     virtual void invoke() = 0;//执行

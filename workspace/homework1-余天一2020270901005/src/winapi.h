@@ -32,4 +32,8 @@
 #define NODEFERWINDOWPOS
 #define NOMCX
 
+#ifndef NOMINMAX
+    #define NOMINMAX
+#endif
+
 #include <windows.h>

@@ -20,6 +20,7 @@ public:
     DWORD main_thread_id;
 
     Display display;
+    MenuManager menu;
     InputHandler input;
 
     Renderer renderer;
@@ -55,46 +56,46 @@ public:
 
 extern std::unique_ptr<GlobalRuntime> runtime;
 
-class GameObjectAppendCommand: Command{
-protected:
-    uint32_t id;
-public:
-    virtual void invoke(){
-        id = runtime->world.create_object();
-    }
-    virtual void revoke(){
-        runtime->world.kill_object(id);
-    }
-    virtual std::string decription() {return "创建物体";};
-};
+// class GameObjectAppendCommand: Command{
+// protected:
+//     uint32_t id;
+// public:
+//     virtual void invoke(){
+//         id = runtime->world.create_object();
+//     }
+//     virtual void revoke(){
+//         runtime->world.kill_object(id);
+//     }
+//     virtual std::string decription() {return "创建物体";};
+// };
 
-class GameObjectUdateCommand: Command{
-protected:
-    uint32_t id;
-    GObjectDesc before, after;
-public:
-    virtual void invoke(){
-        GObject& obj = runtime->world.objects.at(id);
-        before = obj.to_desc();
-        obj.from_desc(after);
-    }
-    virtual void revoke(){
-        GObject& obj = runtime->world.objects.at(id);
-        after = obj.to_desc();
-        obj.from_desc(before);
-    }
-    virtual std::string decription() {return "更改物体属性";};
-};
+// class GameObjectUdateCommand: Command{
+// protected:
+//     uint32_t id;
+//     GObjectDesc before, after;
+// public:
+//     virtual void invoke(){
+//         GObject& obj = runtime->world.objects.at(id);
+//         before = obj.to_desc();
+//         obj.from_desc(after);
+//     }
+//     virtual void revoke(){
+//         GObject& obj = runtime->world.objects.at(id);
+//         after = obj.to_desc();
+//         obj.from_desc(before);
+//     }
+//     virtual std::string decription() {return "更改物体属性";};
+// };
 
-class GameObjectDeleteCommand: Command{
-protected:
-    uint32_t id;
-public:
-    virtual void invoke(){
-        runtime->world.kill_object(id);
-    }
-    virtual void revoke(){
-        id = runtime->world.create_object();
-    }
-    virtual std::string decription() {return "删除物体";};
-};
+// class GameObjectDeleteCommand: Command{
+// protected:
+//     uint32_t id;
+// public:
+//     virtual void invoke(){
+//         runtime->world.kill_object(id);
+//     }
+//     virtual void revoke(){
+//         id = runtime->world.create_object();
+//     }
+//     virtual std::string decription() {return "删除物体";};
+// };

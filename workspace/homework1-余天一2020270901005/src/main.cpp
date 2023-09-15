@@ -5,18 +5,6 @@
 
 std::unique_ptr<GlobalRuntime> runtime;
 
-// 右键菜单
-void handle_context_menu(HWND hWnd, LPARAM lParam) {
-    HMENU hPopup = CreatePopupMenu();
-    static int flag = 0;
-
-    AppendMenuW(hPopup, MF_STRING | (flag ? MF_CHECKED : 0), 1001, L"选择");
-    AppendMenuW(hPopup, MF_SEPARATOR, 0, NULL);
-    AppendMenuW(hPopup, MF_STRING, 1002, L"右键2");
-
-    DestroyMenu(hPopup);
-}
-
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     if (!runtime) {
         return DefWindowProcW(hWnd, Msg, wParam,
@@ -70,14 +58,14 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_CONTEXTMENU: {
-        runtime->display.display_pop_menu(lParam);
+        runtime->menu.display_pop_menu(hWnd, LOWORD(lParam), HIWORD(lParam));
         return 0;
     }
 
     case WM_COMMAND: {
         if (HIWORD(wParam) == 0){
             //来自目录点击的信息
-            runtime->display.on_menu_click(LOWORD(wParam));
+            runtime->menu.on_click(LOWORD(wParam));
         }
         break;
     }
@@ -121,6 +109,8 @@ void opengl_init(void) {
     // glShadeModel(GL_FLAT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);//逆时针的面为正面
     glDepthFunc(GL_LESS);
 
     checkError();
@@ -194,8 +184,6 @@ void tick() {
         handle_mouse();
         handle_keyboard(delta);
 
-        runtime->input.clear_mouse_move();
-
         std::vector<std::unique_ptr<ISystem>>& system_list = runtime->system_list;
         for(size_t i = 0;i < system_list.size();i++){
             system_list[i]->tick();
@@ -205,6 +193,7 @@ void tick() {
             }
         }
 
+        runtime->input.clear_mouse_move();
         runtime->world.tick(delta);
     }
 
@@ -222,11 +211,11 @@ void tick() {
 // 由渲染线程执行，加载资源
 void init_render_resource() {
     RenderReousce &resource = runtime->renderer.resouces;
-    Mesh cube_mesh{Assets::cube_vertices, Assets::cube_indices,
+    Mesh cube_mesh{Assets::cube_vertices.data(), Assets::cube_indices.data(),
                    (uint32_t)Assets::cube_indices.size()};
     resource.add_mesh("cube", std::move(cube_mesh));
 
-    Mesh platform_mesh{Assets::platform_vertices, Assets::cube_indices,
+    Mesh platform_mesh{Assets::platform_vertices.data(), Assets::cube_indices.data(),
                        (uint32_t)Assets::cube_indices.size()};
 
     resource.add_mesh("platform", std::move(platform_mesh));
@@ -239,18 +228,57 @@ void init_render_resource() {
     resource.add_material("default", std::move(default_material));
 
     Mesh line_mesh{
-        Assets::line_vertices,
-        Assets::line_indices,
-        (uint32_t)Assets::cube_indices.size()
+        Assets::line_vertices.data(),
+        Assets::line_indices.data(),
+        (uint32_t)Assets::line_indices.size()
     };
     resource.add_mesh("line", std::move(line_mesh));
 
     Mesh plane_mesh{
-        Assets::plane_vertices,
-        Assets::plane_indices,
+        Assets::plane_vertices.data(),
+        Assets::plane_indices.data(),
         (uint32_t)Assets::plane_indices.size()
     };
     resource.add_mesh("plane", std::move(plane_mesh));
+
+    //生产circle的顶点
+    std::vector<Vertex> circle_vertices(101);
+    //中心点为{0, 0, 0}，半径为1，100边型，101个顶点
+    Color color = {0.0f, 0.2f, 0.8f};
+    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, color};//中心点
+    for(size_t i = 1;i < 101;i++){
+        float angle = to_radian(360.0f / 100 * (i - 1));
+        circle_vertices[i] = { {sinf(angle), cosf(angle), 0.0f}, color};
+    }
+
+    std::vector<unsigned int> circle_indices(300);//100个三角形
+    for(size_t i = 0;i <= 99;i++){//前99个
+        //逆时针
+        circle_indices[i * 3] = 0;
+        circle_indices[i * 3 + 1] = i + 2;
+        circle_indices[i * 3 + 2] = i + 1;
+    }
+    //最后一个
+    circle_indices[297] = 0;
+    circle_indices[298] = 1;
+    circle_indices[299] = 100;
+
+    Mesh circle_mesh{
+        circle_vertices.data(),
+        circle_indices.data(),
+        (uint32_t)circle_indices.size()
+    };
+
+    struct MeshResouce: ResouceItem{
+        std::vector<Vertex> circle_vertices;
+        std::vector<unsigned int> circle_indices;
+    } stroage;
+    stroage.circle_vertices = std::move(circle_vertices);
+    stroage.circle_indices = std::move(circle_indices);
+
+    resource.add_raw_resource(std::move(stroage));
+
+    resource.add_mesh("circle", std::move(circle_mesh));
 }
 
 // 渲染线程执行的代码
