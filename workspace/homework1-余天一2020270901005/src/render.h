@@ -294,6 +294,7 @@ public:
     }
 
     void start_thread() {
+        do_swap();//第一个swap_data是无效的，取出第一个有效的data（world在构造后会立即updata一次），在渲染时保证数据有效
         assert(render_thread == NULL);
         render_thread = CreateThread(NULL, 0, render_thread_func, nullptr, 0, nullptr);
         if (render_thread == NULL){

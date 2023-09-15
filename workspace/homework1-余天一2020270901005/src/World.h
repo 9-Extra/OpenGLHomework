@@ -94,6 +94,7 @@ public:
     std::unordered_map<uint32_t, GObject> objects;
     World(Renderer& renderer): renderer(renderer) {
         init_start_scene();
+        update_swap_data();
     }
 
     uint32_t create_object(){
@@ -124,6 +125,10 @@ public:
             //obj.tick(delta);
         }
 
+        update_swap_data();
+    }
+
+    void update_swap_data(){
         LockedSwapData swap_data = renderer.get_logic_swap_data();
         if (is_camera_dirty){
             swap_data.set_camera(camera);
@@ -192,28 +197,28 @@ private:
         desc.near_z = 1.0f;
         desc.far_z = 1000.0f;
     }
-    {
-        create_object(GObjectDesc{
-            {0.0f, 0.0f, -10.0f},
-            {0.0f, 0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f},
-            {GameObjectPartDesc{"cube", "default"}}
-        });
-    }
-    {
-        create_object(GObjectDesc{
-            {0.0f, 10.0f, -10.0f},
-            {0.0f, 0.0f, 0.0f},
-            {5.0f, 5.0f, 5.0f},
-            {GameObjectPartDesc{"plane", "default"}}
-        });
-    }
-    {
-        GObject &platform = this->objects.at(this->create_object());
-        platform.set_parts().emplace_back(
-            GameObjectPartDesc{"platform", "default"});
-        platform.set_position({0.0, -2.0, -10.0});
-        platform.set_scale({4.0, 0.1, 4.0});
-    }
+    // {
+    //     create_object(GObjectDesc{
+    //         {0.0f, 0.0f, -10.0f},
+    //         {0.0f, 0.0f, 0.0f},
+    //         {1.0f, 1.0f, 1.0f},
+    //         {GameObjectPartDesc{"cube", "default"}}
+    //     });
+    // }
+    // {
+    //     create_object(GObjectDesc{
+    //         {0.0f, 10.0f, -10.0f},
+    //         {0.0f, 0.0f, 0.0f},
+    //         {5.0f, 5.0f, 5.0f},
+    //         {GameObjectPartDesc{"plane", "default"}}
+    //     });
+    // }
+    // {
+    //     GObject &platform = this->objects.at(this->create_object());
+    //     platform.set_parts().emplace_back(
+    //         GameObjectPartDesc{"platform", "default"});
+    //     platform.set_position({0.0, -2.0, -10.0});
+    //     platform.set_scale({4.0, 0.1, 4.0});
+    // }
 }
 };

@@ -230,7 +230,7 @@ struct Matrix {
 
 inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z,
                                          float far_z) {
-    //assert(near_z < far_z);//不要写反了！！！！！！！！！！
+    assert(near_z < far_z);//不要写反了！！！！！！！！！！
     float SinFov = std::sin(fov * 0.5f);
     float CosFov = std::cos(fov * 0.5f);
 
