@@ -11,8 +11,6 @@
 
 class GlobalRuntime {
 public:
-    bool render_frame = false;
-
     bool the_world_enable = true;
 
     std::atomic_int32_t fps;

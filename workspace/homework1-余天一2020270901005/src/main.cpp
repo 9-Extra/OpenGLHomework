@@ -1,9 +1,8 @@
-#include "GlobalRuntime.h"
 #include "Assests.h"
 #include "GLContext.h"
+#include "GlobalRuntime.h"
 #include <PainterSystem.h>
 #include <sstream>
-
 
 std::unique_ptr<GlobalRuntime> runtime;
 
@@ -80,8 +79,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
     case WM_SIZE: {
         runtime->world.window_width = LOWORD(lParam);
         runtime->world.window_height = HIWORD(lParam);
-        runtime->renderer.set_target_viewport(0, 0, LOWORD(lParam),
-                                              HIWORD(lParam));
+        runtime->renderer.set_target_viewport(0, 0, LOWORD(lParam), HIWORD(lParam));
         break;
     }
 
@@ -102,10 +100,8 @@ void opengl_init(void) {
         std::cerr << "系统不支持旧的API" << std::endl;
         exit(-1);
     }
-    const char *vendorName =
-        reinterpret_cast<const char *>(glGetString(GL_VENDOR));
-    const char *version =
-        reinterpret_cast<const char *>(glGetString(GL_VERSION));
+    const char *vendorName = reinterpret_cast<const char *>(glGetString(GL_VENDOR));
+    const char *version = reinterpret_cast<const char *>(glGetString(GL_VERSION));
     std::cout << vendorName << ": " << version << std::endl;
 
     glClearColor(0.0, 0.0, 0.0, 0.0);
@@ -120,14 +116,14 @@ void opengl_init(void) {
 }
 
 void handle_mouse() {
-    //使用鼠标中键旋转视角
-    // 左上角为(0,0)，右下角为(w,h)
-    // InputHandler &input = runtime->input;
-    // static bool is_middle_button_down = false;
+    // 使用鼠标中键旋转视角
+    //  左上角为(0,0)，右下角为(w,h)
+    //  InputHandler &input = runtime->input;
+    //  static bool is_middle_button_down = false;
 
     // if (!is_middle_button_down && input.is_middle_button_down()){
     //     runtime->display.grab_mouse();
-    // } 
+    // }
     // if (is_middle_button_down && !input.is_middle_button_down()){
     //     runtime->display.release_mouse();
     // }
@@ -145,9 +141,9 @@ void handle_mouse() {
 }
 
 void handle_keyboard(float delta) {
-    //wasd移动
-    // World &world = runtime->world;
-    // const float move_speed = 0.01f * delta;
+    // wasd移动
+    //  World &world = runtime->world;
+    //  const float move_speed = 0.01f * delta;
 
     // InputHandler &input = runtime->input;
     // if (input.is_keydown(VK_ESCAPE)) {
@@ -199,8 +195,7 @@ void tick() {
         handle_mouse();
         handle_keyboard(delta);
 
-        std::vector<std::unique_ptr<ISystem>> &system_list =
-            runtime->system_list;
+        std::vector<std::unique_ptr<ISystem>> &system_list = runtime->system_list;
         for (size_t i = 0; i < system_list.size(); i++) {
             system_list[i]->tick();
             if (system_list[i]->delete_me()) {
@@ -220,20 +215,17 @@ void tick() {
     runtime->display.set_title(formatter.str().c_str());
 
     // 控制执行频率
-    DWORD sleep_time = (DWORD)std::max<float>(
-        0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
+    DWORD sleep_time = (DWORD)std::max<float>(0, TIME_PERTICK - runtime->logic_clock.get_current_delta());
     Sleep(sleep_time);
 }
 
 // 由渲染线程执行，加载资源
 void init_render_resource() {
     RenderReousce &resource = runtime->renderer.resouces;
-    Mesh cube_mesh{Assets::cube_vertices.data(), Assets::cube_indices.data(),
-                   (uint32_t)Assets::cube_indices.size()};
+    Mesh cube_mesh{Assets::cube_vertices.data(), Assets::cube_indices.data(), (uint32_t)Assets::cube_indices.size()};
     resource.add_mesh("cube", std::move(cube_mesh));
 
-    Mesh platform_mesh{Assets::platform_vertices.data(),
-                       Assets::cube_indices.data(),
+    Mesh platform_mesh{Assets::platform_vertices.data(), Assets::cube_indices.data(),
                        (uint32_t)Assets::cube_indices.size()};
 
     resource.add_mesh("platform", std::move(platform_mesh));
@@ -245,8 +237,7 @@ void init_render_resource() {
     PhongMaterial default_material{{1.0f, 1.0f, 1.0f}, 15.0f};
     resource.add_material("default", std::move(default_material));
 
-    Mesh line_mesh{Assets::line_vertices.data(), Assets::line_indices.data(),
-                   (uint32_t)Assets::line_indices.size()};
+    Mesh line_mesh{Assets::line_vertices.data(), Assets::line_indices.data(), (uint32_t)Assets::line_indices.size()};
     resource.add_mesh("line", std::move(line_mesh));
 
     Mesh plane_mesh{Assets::plane_vertices.data(), Assets::plane_indices.data(),
@@ -259,9 +250,8 @@ void init_render_resource() {
     circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}; // 中心点
     for (size_t i = 1; i < 101; i++) {
         float angle = to_radian(360.0f / 100 * (i - 1));
-        circle_vertices[i] = {
-            {sinf(angle), cosf(angle), 0.0f},
-            {sinf(angle) / 2 + 1, cosf(angle) / 2 + 1, float(i) / 100}};
+        circle_vertices[i] = {{sinf(angle), cosf(angle), 0.0f},
+                              {sinf(angle) / 2 + 1, cosf(angle) / 2 + 1, float(i) / 100}};
     }
 
     std::vector<unsigned int> circle_indices(300); // 100个三角形
@@ -276,8 +266,7 @@ void init_render_resource() {
     circle_indices[298] = 1;
     circle_indices[299] = 100;
 
-    Mesh circle_mesh{circle_vertices.data(), circle_indices.data(),
-                     (uint32_t)circle_indices.size()};
+    Mesh circle_mesh{circle_vertices.data(), circle_indices.data(), (uint32_t)circle_indices.size()};
 
     struct MeshResouce : ResouceItem {
         std::vector<Vertex> circle_vertices;
@@ -334,11 +323,11 @@ int main(int argc, char **argv) {
         runtime = std::make_unique<GlobalRuntime>();
         runtime->display.show(); // 必须在runtime初始化完成后再执行
 
-        runtime->renderer.start_thread();//启动
+        runtime->renderer.start_thread(); // 启动
 
-        std::vector<std::unique_ptr<ISystem>> &system_list =
-            runtime->system_list;
-        system_list.emplace_back(std::make_unique<PainterSystem>());
+        std::vector<std::unique_ptr<ISystem>> &system_list = runtime->system_list;
+        system_list.emplace_back(std::make_unique<PainterSystem>()); // 添加系统
+        // 执行所有系统的初始化
         for (size_t i = 0; i < system_list.size(); i++) {
             system_list[i]->init();
         }
