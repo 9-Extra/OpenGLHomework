@@ -113,6 +113,16 @@ public:
         return id;
     }
 
+    uint32_t create_object(GObjectDesc&& desc){
+        uint32_t id = create_object();
+        GObject& obj = objects.at(id);
+        obj.position = desc.position;
+        obj.rotation = desc.rotation;
+        obj.scale = desc.scale;
+        obj.parts = std::move(desc.parts);
+        return id;
+    }
+
     void kill_object(uint32_t id){
         if (objects.erase(id) == 0){
             std::cerr << "试图删除不存在的object!" << std::endl;

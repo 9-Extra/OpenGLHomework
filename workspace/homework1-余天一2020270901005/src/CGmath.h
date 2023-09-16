@@ -104,18 +104,22 @@ struct Vector3f {
     inline Vector3f operator*(const float n) { return {x * n, y * n, z * n}; }
     inline Vector3f operator/(const float n) { return *this * (1.0f / n);}
 
-    inline float dot(const Vector3f b) { return x * b.x + y * b.y + z * b.z; }
+    inline float dot(const Vector3f b) const { return x * b.x + y * b.y + z * b.z; }
 
     inline Vector3f cross(const Vector3f b) {
         return {this->y * b.z - this->z * b.y, this->z * b.x * this->x * b.z,
                 this->x * b.y - this->y * b.x};
     }
 
-    inline float square() { return this->dot(*this); }
+    inline float square() const { return this->dot(*this); }
 
     inline Vector3f normalize() {
         float inv_sqrt = Q_rsqrt(this->square());
         return *this * inv_sqrt;
+    }
+
+    inline float length() const {
+        return std::sqrt(square());
     }
 
     friend std::ostream& operator << (std::ostream& os, const Vector3f& v)

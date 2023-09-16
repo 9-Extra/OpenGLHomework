@@ -7,92 +7,96 @@ private:
     bool is_mouse_left_down = false;
     Vector3f start_postion;
     std::stack<uint32_t> object_stack;
-    enum Select { LINE, SQUARE, CIRCLE } select = LINE;
+    enum Select { LINE = 0, SQUARE = 1, CIRCLE = 2 } select = LINE;
 
 public:
     void init() override {
-        runtime->menu.add_item("painter", [&](MenuManager::MenuBuilder& builder){
-            builder.set_menu(object_stack.empty() ? (MF_DISABLED | MF_GRAYED) : 0 | MF_STRING, L"撤销", [&]{
+        //设置目录
+        runtime->menu.add_item("painter", [&](MenuManager::MenuBuilder &builder) {
+            builder.set_menu(object_stack.empty() ? (MF_DISABLED | MF_GRAYED) : 0 | MF_STRING, L"撤销", [&] {
                 runtime->world.kill_object(object_stack.top());
                 object_stack.pop();
             });
-            builder.set_menu(MF_SEPARATOR, L"", []{});//分割线
-            
-            builder.set_menu( select == LINE ? MF_CHECKED : 0 | MF_STRING, L"线段", [&]{
-                if (!is_mouse_left_down) select = LINE;
+            builder.set_menu(MF_SEPARATOR, L"", [] {}); // 分割线
+
+            builder.set_menu(select == LINE ? MF_CHECKED : 0 | MF_STRING, L"线段", [&] {
+                if (!is_mouse_left_down)
+                    select = LINE;
             });
-            builder.set_menu( select == SQUARE ? MF_CHECKED : 0 | MF_STRING, L"矩形", [&]{
-                if (!is_mouse_left_down) select = SQUARE;
+            builder.set_menu(select == SQUARE ? MF_CHECKED : 0 | MF_STRING, L"矩形", [&] {
+                if (!is_mouse_left_down)
+                    select = SQUARE;
             });
-            builder.set_menu( select == CIRCLE ? MF_CHECKED : 0 | MF_STRING, L"圆", [&]{
-                if (!is_mouse_left_down) select = CIRCLE;
+            builder.set_menu(select == CIRCLE ? MF_CHECKED : 0 | MF_STRING, L"圆", [&] {
+                if (!is_mouse_left_down)
+                    select = CIRCLE;
             });
         });
+    }
+
+    // 当点击时
+    void on_click(Vector3f point) {
+        World &world = runtime->world;
+
+        start_postion = point;
+
+        static const std::string mesh_name[3] = {"line", "plane", "circle"};
+        static const uint32_t topology[3] = {GL_LINES, GL_TRIANGLES, GL_TRIANGLES};
+        GObjectDesc objdesc{start_postion,
+                            {0.0f, 0.0f, 0.0f},
+                            {0.0f, 0.0f, 0.0f},
+                            {GameObjectPartDesc{
+                                mesh_name[select],
+                                "default",
+                                topology[select],
+                            }}};
+        object_stack.push(world.create_object(std::move(objdesc)));
+    }
+
+    void on_drag(Vector3f point) {
+        World &world = runtime->world;
+        if (object_stack.empty()){
+            return;
+        }
+
+        GObject &obj = world.objects.at(object_stack.top());
+        if (select == LINE) {
+            obj.set_scale(point - start_postion);
+        } else if (select == SQUARE) {
+            Vector3f dis = point - start_postion;
+            //修正为正数，防止在翻转物体的朝向导致看不见
+            dis.x = std::abs(dis.x);
+            dis.y = std::abs(dis.y);
+            dis.z = std::abs(dis.z);
+            obj.set_scale(dis);
+        } else if (select == CIRCLE) {
+            float distance = (point - start_postion).length();
+            obj.set_scale({distance, distance, distance});
+        }
     }
 
     void tick() override {
         bool current_is_left_button_down = runtime->input.is_left_button_down();
         if (current_is_left_button_down) {
+            float z_bias = 200.0f - object_stack.size() * 0.01f; // 使新绘制的图形离相机更近防止遮挡
             World &world = runtime->world;
-            Vector3f point_oritation = world.get_screen_point_oritation(
-                runtime->input.get_mouse_position());
-            Vector3f point =
-                world.get_camera().position +
-                point_oritation /
-                    (point_oritation.dot(world.get_camera_oritation())) * 10.0f;
+            Vector3f point_oritation = world.get_screen_point_oritation(runtime->input.get_mouse_position());
+            // 计算鼠标点击的点在世界坐标系中的位置
+            Vector3f point = world.get_camera().position +
+                             point_oritation / (point_oritation.dot(world.get_camera_oritation())) * z_bias;
 
             if (!is_mouse_left_down) {
                 // 左键点击
-                start_postion = point;
-
-                if (select == LINE) {
-                    object_stack.push(world.create_object(
-                        GObjectDesc{start_postion,
-                                    {0.0f, 0.0f, 0.0f},
-                                    {0.0f, 0.0f, 0.0f},
-                                    {GameObjectPartDesc{
-                                        "line", "default", GL_LINES,
-                                        }}}));
-                } else if (select == SQUARE) {
-                    object_stack.push(world.create_object(
-                        GObjectDesc{start_postion,
-                                    {0.0f, 0.0f, 0.0f},
-                                    {0.0f, 0.0f, 0.0f},
-                                    {GameObjectPartDesc{
-                                        "plane", "default", GL_TRIANGLES,
-                                        }}}));
-                } else if (select == CIRCLE){
-                    object_stack.push(world.create_object(
-                        GObjectDesc{start_postion,
-                                    {0.0f, 0.0f, 0.0f},
-                                    {0.0f, 0.0f, 0.0f},
-                                    {GameObjectPartDesc{
-                                        "circle", "default", GL_TRIANGLES,
-                                        }}}));
-                }
+                on_click(point);
 
             } else {
                 // 拖拽
-                if (select == LINE) {
-                    GObject& obj = world.objects.at(object_stack.top());
-                    obj.set_scale(point - start_postion);
-                } else if (select == SQUARE || select == CIRCLE) {
-                    Vector3f max_corner{std::max(start_postion.x, point.x), std::max(start_postion.y, point.y), std::max(start_postion.z, point.z)};
-                    Vector3f min_corner{std::min(start_postion.x, point.x), std::min(start_postion.y, point.y), std::min(start_postion.z, point.z)};
-                    GObject& obj = world.objects.at(object_stack.top());
-                    obj.set_scale(max_corner - min_corner);
-                }
+                on_drag(point);
             }
-        }
-
-        if (is_mouse_left_down && !current_is_left_button_down) {
-            // 左键松开
         }
 
         is_mouse_left_down = current_is_left_button_down;
     }
 
-    ~PainterSystem() {
-        runtime->menu.remove_item("painter");
-    }
+    ~PainterSystem() { runtime->menu.remove_item("painter"); }
 };
