@@ -1,7 +1,7 @@
 #pragma once
-#include "CGmath.h"
+#include "../utils/CGmath.h"
 #include <assert.h>
-#include "winapi.h"
+#include "../utils/winapi.h"
 
 #define KEYCODE_MAX 0xff
 

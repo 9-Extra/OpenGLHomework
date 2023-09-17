@@ -1,6 +1,4 @@
-#pragma once
-#include "RenderAspect.h"
-#include <vector>
+#include "Assets.h"
 
 namespace Assets {
 const std::vector<Vertex> cube_vertices = {

@@ -1,5 +1,5 @@
 #pragma once
-#include "CGmath.h"
+#include "../utils/CGmath.h"
 #include <cstdint>
 #include <vector>
 

@@ -1,17 +1,21 @@
 #pragma once
 
+#include "command/Command.h"
+#include "input/InputHandler.h"
+#include "system/ISystem.h"
+#include "utils/Clock.h"
+#include "utils/winapi.h"
+#include "window/Display.h"
+#include "window/MenuManager.h"
+#include "world/World.h"
 #include <atomic>
-#include "winapi.h"
-#include "Clock.h"
-#include "World.h"
-#include "InputHandler.h"
-#include "Display.h"
-#include "Command.h"
-#include "ISystem.h"
+
+const float TIME_PERTICK = 1000.0f / 60.0f;
 
 class GlobalRuntime {
 public:
     bool the_world_enable = true;
+    uint32_t tick_count = 0;
 
     std::atomic_int32_t fps;
 
@@ -23,15 +27,14 @@ public:
 
     Renderer renderer;
     World world;
-    
+
     Clock logic_clock, render_clock;
     CommandContainer command_stack;
 
     std::vector<std::unique_ptr<ISystem>> system_list;
 
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
-        : main_thread_id(GetCurrentThreadId()), display(width, height), world(renderer){
-    }
+        : main_thread_id(GetCurrentThreadId()), display(width, height), world(renderer) {}
 
     void the_world() { the_world_enable = true; }
     void continue_run() {
@@ -45,13 +48,23 @@ public:
         renderer.terminal_thread();
     }
 
-    void execute_command(std::unique_ptr<Command>&& command){
+    void tick();
+
+    void register_system(ISystem *sys) {
+        sys->init();
+        system_list.emplace_back(std::unique_ptr<ISystem>(sys));
+    }
+
+    void execute_command(std::unique_ptr<Command> &&command) {
         command->invoke();
         command_stack.push_command(std::move(command));
     }
 };
 
 extern std::unique_ptr<GlobalRuntime> runtime;
+
+void engine_init();
+void engine_shutdown();
 
 // class GameObjectAppendCommand: Command{
 // protected:

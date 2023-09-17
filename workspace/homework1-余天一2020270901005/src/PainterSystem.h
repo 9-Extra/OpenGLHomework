@@ -1,5 +1,5 @@
 #pragma once
-#include "GlobalRuntime.h"
+#include "engine/GlobalRuntime.h"
 #include <stack>
 
 class PainterSystem : public ISystem {
