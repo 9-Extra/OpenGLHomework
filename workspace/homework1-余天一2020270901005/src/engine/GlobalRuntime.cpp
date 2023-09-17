@@ -114,8 +114,6 @@ DWORD WINAPI render_thread_func(LPVOID lpParam) {
         }
     }
 
-    PostThreadMessageW(runtime->main_thread_id, WM_QUIT, 0,
-                       0); // 通知主线程退出消息循环
     return 0;
 }
 
@@ -237,8 +235,21 @@ void engine_init() {
 
     runtime->renderer.start_thread(); // 启动
 }
+
 void engine_shutdown() {
     runtime->system_list.clear();
-
+    runtime->renderer.terminal_thread();
+    
     runtime.reset();
+}
+
+bool GlobalRuntime::event_loop() {
+    MSG msg;
+    while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+        DispatchMessageW(&msg);
+        if (msg.message == WM_QUIT) {
+            return true;
+        }
+    }
+    return false;
 }

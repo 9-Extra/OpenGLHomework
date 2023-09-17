@@ -216,6 +216,7 @@ public:
 
 private:
     friend class GlobalRuntime;
+    friend void engine_shutdown();
     friend void init_render_resource();
     HANDLE render_thread{NULL};
     /*
@@ -243,8 +244,10 @@ private:
     bool viewport_updated{false};
 
     void terminal_thread() {
+        //关闭渲染线程
         assert(!render_thread_should_exit);
         render_thread_should_exit = true;
+        WaitForSingleObject(render_thread, INFINITE);
         // render_thread.join();
     }
 };

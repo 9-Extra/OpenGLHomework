@@ -16,7 +16,6 @@ class GlobalRuntime {
 public:
     bool the_world_enable = true;
     uint32_t tick_count = 0;
-
     std::atomic_int32_t fps;
 
     DWORD main_thread_id;
@@ -31,8 +30,6 @@ public:
     Clock logic_clock, render_clock;
     CommandContainer command_stack;
 
-    std::vector<std::unique_ptr<ISystem>> system_list;
-
     GlobalRuntime(uint32_t width = 1080, uint32_t height = 720)
         : main_thread_id(GetCurrentThreadId()), display(width, height), world(renderer) {}
 
@@ -43,13 +40,6 @@ public:
         input.clear_keyboard_state();
     }
 
-    void terminal() {
-        // 通知渲染线程退出，但是继续执行，直到渲染线程在退出时通知主线程结束消息循环
-        renderer.terminal_thread();
-    }
-
-    void tick();
-
     void register_system(ISystem *sys) {
         sys->init();
         system_list.emplace_back(std::unique_ptr<ISystem>(sys));
@@ -59,6 +49,27 @@ public:
         command->invoke();
         command_stack.push_command(std::move(command));
     }
+
+    void enter_loop() {
+        logic_clock.update();
+        while (!event_loop()) {
+            tick();
+        }
+    }
+
+    // 关闭
+    void terminal() {
+        //通知消息循环退出
+        PostQuitMessage(0);
+    }
+
+private:
+friend void engine_shutdown();
+    std::vector<std::unique_ptr<ISystem>> system_list;
+
+    void tick();
+
+    bool event_loop();
 };
 
 extern std::unique_ptr<GlobalRuntime> runtime;
