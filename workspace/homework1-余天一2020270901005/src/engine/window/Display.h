@@ -21,8 +21,18 @@ public:
 
     Display(uint32_t width, uint32_t height);
 
+    // void grab_mouse_tick(){
+    //     if (is_mouse_grab){
+    //         RECT WndRect;
+    //         GetWindowRect(hwnd, &WndRect);
+    //         //将鼠标移到窗口中间
+    //         SetCursorPos((WndRect.left + WndRect.right) / 2, (WndRect.bottom + WndRect.top) / 2);
+    //     }
+    // }
+
     void grab_mouse(){
         while (ShowCursor(false) >= 0);
+        is_mouse_grab = true;
         RECT WndRect;
         GetCursorPos(&last_mouse_position);
         GetWindowRect(hwnd, &WndRect);
@@ -30,6 +40,7 @@ public:
     }
 
     void release_mouse(){
+        is_mouse_grab = false;
         ClipCursor(NULL);
         SetCursorPos(last_mouse_position.x, last_mouse_position.y);
         while (ShowCursor(true) < 0);
@@ -43,6 +54,8 @@ private:
 
     HWND hwnd;
     POINT last_mouse_position;
+
+    bool is_mouse_grab = false;
 
     friend class MenuBuilder;
     // 对执行此函数的线程绑定opengl上下文

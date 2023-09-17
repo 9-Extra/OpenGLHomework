@@ -2,12 +2,21 @@
 #include "engine/GlobalRuntime.h"
 #include <stack>
 
+class RotatingCircle: public GObject{
+    using GObject::GObject;//继承构造函数
+
+    virtual void tick() override{
+        this->rotation.x += 0.001f * runtime->logic_clock.get_delta();
+        mark_dirty();
+    }
+};
+
 class PainterSystem : public ISystem {
 private:
     bool is_mouse_left_down = false;
     Vector3f start_postion;
     float z_bias;
-    std::stack<uint32_t> object_stack;
+    std::stack<std::shared_ptr<GObject>> object_stack;
     enum Select { LINE = 0, SQUARE = 1, CIRCLE = 2 } select = LINE;
 
 public:
@@ -57,7 +66,11 @@ public:
                                 "default",
                                 topology[select],
                             }}};
-        object_stack.push(world.create_object(std::move(objdesc)));
+        if (select == CIRCLE){
+            object_stack.push(world.create_object<RotatingCircle>(objdesc));
+        } else {
+            object_stack.push(world.create_object(objdesc));
+        }
     }
 
     void on_drag() {
@@ -70,19 +83,22 @@ public:
         Vector3f point = world.get_camera().position +
                          point_oritation / (point_oritation.dot(world.get_camera_oritation())) * z_bias;
 
-        GObject &obj = world.objects.at(object_stack.top());
+        std::shared_ptr<GObject> obj = object_stack.top();
         if (select == LINE) {
-            obj.set_scale(point - start_postion);
+            obj->scale = point - start_postion;
+            obj->mark_dirty();
         } else if (select == SQUARE) {
             Vector3f dis = point - start_postion;
             // 修正为正数，防止翻转物体的朝向导致看不见
             dis.x = std::abs(dis.x);
             dis.y = std::abs(dis.y);
             dis.z = std::abs(dis.z);
-            obj.set_scale(dis);
+            obj->scale = dis;
+            obj->mark_dirty();
         } else if (select == CIRCLE) {
             float distance = (point - start_postion).length();
-            obj.set_scale({distance, distance, distance});
+            obj->scale = {distance, distance, distance};
+            obj->mark_dirty();
         }
     }
 

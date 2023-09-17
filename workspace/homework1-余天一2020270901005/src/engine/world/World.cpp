@@ -2,7 +2,7 @@
 
 void World::tick() {
     for (auto &[id, obj] : objects) {
-        obj.tick();
+        obj->tick();
     }
 
     update_swap_data();
@@ -14,7 +14,7 @@ void World::update_swap_data() {
         is_camera_dirty = false;
     }
     for (auto &[id, obj] : objects) {
-        obj.update_render(swap_data);
+        obj->update_render(swap_data);
     }
 }
 Vector3f World::get_camera_oritation() const {
@@ -77,27 +77,4 @@ void World::init_start_scene() {
     //     platform.set_position({0.0, -2.0, -10.0});
     //     platform.set_scale({4.0, 0.1, 4.0});
     // }
-}
-uint32_t World::create_object() {
-    uint32_t id = game_object_id_alloctor.alloc_id();
-    objects.emplace(id, GObject(id));
-    return id;
-}
-uint32_t World::create_object(const GObjectDesc &desc) {
-    uint32_t id = create_object();
-    GObject &obj = objects.at(id);
-    obj.position = desc.position;
-    obj.rotation = desc.rotation;
-    obj.scale = desc.scale;
-    obj.parts = desc.parts;
-    return id;
-}
-uint32_t World::create_object(GObjectDesc &&desc) {
-    uint32_t id = create_object();
-    GObject &obj = objects.at(id);
-    obj.position = desc.position;
-    obj.rotation = desc.rotation;
-    obj.scale = desc.scale;
-    obj.parts = std::move(desc.parts);
-    return id;
 }

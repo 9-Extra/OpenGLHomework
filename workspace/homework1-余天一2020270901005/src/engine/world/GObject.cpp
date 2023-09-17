@@ -9,7 +9,8 @@ void GObject::update_render(LockedSwapData &swap_data) {
             dirty_parts.emplace_back(p.resource_key_mesh, p.resource_key_material, p.topology,
                                      transform * p.model_matrix);
         }
-        swap_data.add_dirty_gameobject(GameObjectRenderDesc{id, std::move(dirty_parts)});
+
+        swap_data.add_dirty_gameobject(GameObjectRenderDesc{(size_t)this->shared_from_this().get(), std::move(dirty_parts)});
         is_render_dirty = false;
     }
 }

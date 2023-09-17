@@ -54,12 +54,12 @@ struct GameObjectPartDesc {
 };
 
 struct GameObjectRenderDesc {
-    uint32_t id;
+    size_t id;
     std::vector<GameObjectPartDesc> parts;
 };
 
 struct GameObjectPartId {
-    uint32_t gameobject_id;
+    size_t gameobject_id;
     uint32_t part_index;
 
     bool operator==(const GameObjectPartId &id) const {

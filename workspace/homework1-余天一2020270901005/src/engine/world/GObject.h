@@ -2,37 +2,41 @@
 #include "../utils/CGmath.h"
 #include "engine/render/Render.h"
 #include <vector>
-
+#include <memory>
 struct GObjectDesc {
     Vector3f position{0.0, 0.0, 0.0};
     Vector3f rotation{0.0, 0.0, 0.0}; // zxy顺序
     Vector3f scale{1.0, 1.0, 1.0};
     std::vector<GameObjectPartDesc> parts;
 };
-class GObject{
+
+//物体的基类，可以直接使用
+//继承enable_shared_from_this必须使用public
+class GObject : public std::enable_shared_from_this<GObject>{
 public:
-    void set_position(const Vector3f& position){
-        this->position = position;
-        is_render_dirty = true;
-    }
+    Vector3f position{0.0, 0.0, 0.0};
+    Vector3f rotation{0.0, 0.0, 0.0}; // zxy顺序
+    Vector3f scale{1.0, 1.0, 1.0};
+    
+    GObject() {};
+    GObject(GObjectDesc&& desc) {
+        this->position = desc.position;
+        this->rotation = desc.rotation;
+        this->scale = desc.scale;
+        this->parts = std::move(desc.parts);
+    };
 
-    void set_rotation(const Vector3f& rotation){
-        this->rotation = rotation;
-        is_render_dirty = true;
-    }
-
-    void set_scale(const Vector3f& scale){
-        this->scale = scale;
-        is_render_dirty = true;
-    }
+    GObject(const GObjectDesc& desc) {
+        this->from_desc(desc);
+    };
 
     std::vector<GameObjectPartDesc>& set_parts(){
-        is_render_dirty = true;
+        mark_dirty();
         return parts;
     }
 
     //可以重载
-    void tick() {};
+    virtual void tick() {};
 
     GObjectDesc to_desc(){
         return {
@@ -43,25 +47,22 @@ public:
         };
     }
 
+    void mark_dirty(){
+        is_render_dirty = true;
+    }
+
     void from_desc(const GObjectDesc& desc){
         position = desc.position;
         rotation = desc.rotation;
         scale = desc.scale;
         parts = desc.parts;
-        is_render_dirty = true;
+        mark_dirty();
     }
 private:
     friend class World;
-    const uint32_t id;
-    
-    Vector3f position{0.0, 0.0, 0.0};
-    Vector3f rotation{0.0, 0.0, 0.0}; // zxy顺序
-    Vector3f scale{1.0, 1.0, 1.0};
 
     std::vector<GameObjectPartDesc> parts;
     bool is_render_dirty{true};
-    
-    GObject(const uint32_t id): id(id) {}
 
     void update_render(LockedSwapData &swap_data);
 };
