@@ -233,7 +233,7 @@ void engine_init() {
     runtime = std::make_unique<GlobalRuntime>();
     runtime->display.show(); // 必须在runtime初始化完成后再执行
 
-    runtime->renderer.start_thread(); // 启动
+    runtime->renderer.start_thread(); // 启动渲染线程
 }
 
 void engine_shutdown() {
@@ -243,7 +243,7 @@ void engine_shutdown() {
     runtime.reset();
 }
 
-bool GlobalRuntime::event_loop() {
+bool GlobalRuntime::pull_events() {
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
         DispatchMessageW(&msg);

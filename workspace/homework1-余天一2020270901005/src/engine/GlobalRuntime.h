@@ -52,7 +52,7 @@ public:
 
     void enter_loop() {
         logic_clock.update();
-        while (!event_loop()) {
+        while (!pull_events()) {
             tick();
         }
     }
@@ -69,7 +69,7 @@ friend void engine_shutdown();
 
     void tick();
 
-    bool event_loop();
+    bool pull_events();
 };
 
 extern std::unique_ptr<GlobalRuntime> runtime;
