@@ -91,7 +91,7 @@ public:
         renderer.get_logic_swap_data().delete_game_object(id);
     }
 
-    void tick(float delta);
+    void tick();
 
     void update_swap_data();
 

@@ -13,7 +13,7 @@ void GObject::update_render(LockedSwapData &swap_data) {
         is_render_dirty = false;
     }
 }
-void World::tick(float delta) {
+void World::tick() {
     for (auto &[id, obj] : objects) {
         // obj.tick(delta);
     }

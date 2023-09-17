@@ -105,11 +105,11 @@ DWORD WINAPI render_thread_func(LPVOID lpParam) {
         std::cerr << "渲染循环开始\n";
         runtime->render_clock.update();
         while (!runtime->renderer.render_thread_should_exit) {
-            float delta = runtime->render_clock.update();
+            runtime->render_clock.update();
 
             runtime->renderer.render();
 
-            runtime->fps = calculate_fps(delta);
+            runtime->fps = calculate_fps( runtime->render_clock.get_delta());
             context.swap();
         }
     }
@@ -203,7 +203,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam) {
 }
 
 void GlobalRuntime::tick() {
-    float delta = logic_clock.update();
+    logic_clock.update();
     if (!the_world_enable) {
         // std::cerr << "start tick: " << tick_count << std::endl;
         tick_count++;
@@ -215,9 +215,9 @@ void GlobalRuntime::tick() {
                 system_list.pop_back();
             }
         }
+        world.tick();
 
         input.clear_mouse_move();
-        world.tick(delta);
     }
 
     std::wstringstream formatter;
