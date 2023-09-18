@@ -2,7 +2,7 @@
 
 void GObject::update_render(LockedSwapData &swap_data) {
     if (is_render_dirty) {
-        Matrix transform = Matrix::translate(position) * Matrix::rotate(rotation) * Matrix::scale(scale);
+        Matrix transform = this->transform.transform_matrix();
 
         std::vector<GameObjectPartDesc> dirty_parts;
         for (const GameObjectPartDesc &p : parts) {

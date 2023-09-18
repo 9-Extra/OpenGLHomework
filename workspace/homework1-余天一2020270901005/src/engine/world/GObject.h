@@ -3,10 +3,9 @@
 #include "engine/render/Render.h"
 #include <vector>
 #include <memory>
+#include "Transform.h"
 struct GObjectDesc {
-    Vector3f position{0.0, 0.0, 0.0};
-    Vector3f rotation{0.0, 0.0, 0.0}; // zxy顺序
-    Vector3f scale{1.0, 1.0, 1.0};
+    Transform transform;
     std::vector<GameObjectPartDesc> parts;
 };
 
@@ -14,15 +13,11 @@ struct GObjectDesc {
 //继承enable_shared_from_this必须使用public
 class GObject : public std::enable_shared_from_this<GObject>{
 public:
-    Vector3f position{0.0, 0.0, 0.0};
-    Vector3f rotation{0.0, 0.0, 0.0}; // zxy顺序
-    Vector3f scale{1.0, 1.0, 1.0};
+    Transform transform;
     
     GObject() {};
     GObject(GObjectDesc&& desc) {
-        this->position = desc.position;
-        this->rotation = desc.rotation;
-        this->scale = desc.scale;
+        this->transform = desc.transform;
         this->parts = std::move(desc.parts);
     };
 
@@ -40,9 +35,7 @@ public:
 
     GObjectDesc to_desc(){
         return {
-            position,
-            rotation,
-            scale,
+            transform,
             parts
         };
     }
@@ -52,9 +45,7 @@ public:
     }
 
     void from_desc(const GObjectDesc& desc){
-        position = desc.position;
-        rotation = desc.rotation;
-        scale = desc.scale;
+        transform = desc.transform;
         parts = desc.parts;
         mark_dirty();
     }

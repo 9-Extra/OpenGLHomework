@@ -6,7 +6,7 @@ class RotatingCircle: public GObject{
     using GObject::GObject;//继承构造函数
 
     virtual void tick() override{
-        this->rotation.x += 0.001f * runtime->logic_clock.get_delta();
+        this->transform.rotation.x += 0.001f * runtime->logic_clock.get_delta();
         mark_dirty();
     }
 };
@@ -58,9 +58,9 @@ public:
 
         static const std::string mesh_name[3] = {"line", "plane", "circle"};
         static const uint32_t topology[3] = {GL_LINES, GL_TRIANGLES, GL_TRIANGLES};
-        GObjectDesc objdesc{start_postion,
+        GObjectDesc objdesc{Transform{start_postion,
                             {0.0f, 0.0f, 0.0f},
-                            {0.0f, 0.0f, 0.0f},
+                            {0.0f, 0.0f, 0.0f}},
                             {GameObjectPartDesc{
                                 mesh_name[select],
                                 "default",
@@ -85,7 +85,7 @@ public:
 
         std::shared_ptr<GObject> obj = object_stack.top();
         if (select == LINE) {
-            obj->scale = point - start_postion;
+            obj->transform.scale = point - start_postion;
             obj->mark_dirty();
         } else if (select == SQUARE) {
             Vector3f dis = point - start_postion;
@@ -93,11 +93,11 @@ public:
             dis.x = std::abs(dis.x);
             dis.y = std::abs(dis.y);
             dis.z = std::abs(dis.z);
-            obj->scale = dis;
+            obj->transform.scale = dis;
             obj->mark_dirty();
         } else if (select == CIRCLE) {
             float distance = (point - start_postion).length();
-            obj->scale = {distance, distance, distance};
+            obj->transform.scale = {distance, distance, distance};
             obj->mark_dirty();
         }
     }
