@@ -21,7 +21,7 @@ if(MSVC)
 else()
     add_compile_options(-Wall -Wextra -pedantic -Wno-gnu-anonymous-struct -Wno-nested-anon-types)
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        add_compile_options(-Wno-unused-variable -Wno-unused-parameter -Wno-pedantic -Wno-unused-but-set-variable)
+        add_compile_options(-Wno-unused-variable -Wno-unused-parameter -Wno-pedantic -Wno-unused-but-set-variable -Wno-unused-function)
     endif()
 endif()
 

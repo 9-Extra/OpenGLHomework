@@ -1,13 +1,15 @@
 #include <assert.h>
 #include <chrono>
 #include <cmath>
-#include <gl/glut.h>
+#include <fstream>
+#include <GL/glew.h>
+#include <GL/glut.h>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
-
+#include <functional>
 
 #define NOGDICAPMASKS
 #define NOSYSMETRICS
@@ -45,6 +47,7 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
+#include <FreeImage.h>
 
 static float Q_rsqrt(float number) {
     long i;
@@ -325,7 +328,7 @@ inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, f
 inline void checkError() {
     GLenum error;
     while ((error = glGetError()) != GL_NO_ERROR) {
-        fprintf(stderr, "GL error 0x%X: %s\n", error, gluErrorString(error));
+        std::cerr << "GL error 0x" << error << ": "  << gluErrorString(error) << std::endl;
     }
 }
 
@@ -412,6 +415,58 @@ void handle_mouse_click(int button, int state, int x, int y) {
     }
 }
 
+unsigned int complie_shader(const char *const src, unsigned int shader_type) {
+    unsigned int id = glCreateShader(shader_type);
+
+    glShaderSource(id, 1, &src, NULL);
+    glCompileShader(id);
+
+    int success;
+    char infoLog[512];
+    glGetShaderiv(id, GL_COMPILE_STATUS, &success);
+
+    if (!success) {
+        glGetShaderInfoLog(id, 512, NULL, infoLog);
+        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+        exit(-1);
+    }
+
+    return id;
+}
+
+unsigned int complie_shader_program(const std::string &vs_path, const std::string &ps_path) {
+    std::ifstream vs_read(vs_path);
+    std::string vs_src((std::istreambuf_iterator<char>(vs_read)), std::istreambuf_iterator<char>());
+
+    std::ifstream ps_read(ps_path);
+    std::string ps_src((std::istreambuf_iterator<char>(ps_read)), std::istreambuf_iterator<char>());
+
+    unsigned int vs = complie_shader(vs_src.data(), GL_VERTEX_SHADER);
+    unsigned int ps = complie_shader(ps_src.data(), GL_FRAGMENT_SHADER);
+
+    unsigned int shaderProgram;
+    shaderProgram = glCreateProgram();
+
+    glAttachShader(shaderProgram, vs);
+    glAttachShader(shaderProgram, ps);
+    glLinkProgram(shaderProgram);
+
+    int success;
+    char infoLog[512];
+
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+        std::cout << infoLog << std::endl;
+        exit(-1);
+    }
+
+    glDeleteShader(vs);
+    glDeleteShader(ps);
+
+    return shaderProgram;
+}
+
 struct Transform {
     Vector3f position;
     Vector3f rotation;
@@ -424,15 +479,8 @@ struct Transform {
 
 struct Vertex {
     Vector3f position;
-    Color color;
-};
-
-struct RenderItem final {
-    uint32_t mesh_id;
-    uint32_t material_id;
-    uint32_t topology;
-
-    Matrix model_matrix;
+    Vector3f normal;
+    Vector2f uv = {0.0f, 0.0f};
 };
 
 struct PointLight {
@@ -446,66 +494,245 @@ struct DirectionalLight {
 };
 
 struct Mesh {
-    const Vertex *vertices;
-    const uint32_t *indices;
+    const unsigned int VAO_id;
     const uint32_t indices_count;
 };
 
+struct TextureDesc{
+    std::string path;
+};
+
+struct Texture{
+    const unsigned int texture_id;
+};
+
+struct MaterialDesc{
+    struct UniformDataDesc {
+        uint32_t binding_id;
+        uint32_t size;
+        void* data;
+    };
+
+    struct SampleData {
+        uint32_t binding_id;
+        std::string texture_key;
+    };
+
+    std::string shader_name;
+    std::vector<UniformDataDesc> uniforms;
+    std::vector<SampleData> samplers;
+};
+
+//绑定标准可用的uniform
+void bind_standard_uniform();
+struct Material{
+    struct UniformData {
+        uint32_t binding_id;
+        uint32_t buffer_id;
+    };
+    struct SampleData {
+        uint32_t binding_id;
+        unsigned int texture_id;
+    };
+
+    unsigned int shaderprogram_id; // 对应的shader的id
+    std::vector<UniformData> uniforms;
+    std::vector<SampleData> samplers;
+
+    void bind() const{
+        glUseProgram(shaderprogram_id);
+
+        bind_standard_uniform();
+
+        for(const UniformData& u : uniforms){
+            glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
+        }
+        for(const SampleData& s: samplers){
+            glActiveTexture(GL_TEXTURE0 + s.binding_id);
+            glBindTexture(GL_TEXTURE_2D, s.texture_id);
+        }
+    }
+};
 struct PhongMaterial {
     Vector3f diffusion;
     float specular_factor;
+};
+struct Shader{
+    unsigned int id;
+    void use(){
+        glUseProgram(id);
+    }
 };
 
 struct ResouceItem {
     virtual ~ResouceItem() = default;
 };
-class RenderReousce {
+class RenderReousce final {
 public:
-    uint32_t find_material(const std::string &key) {
-        if (auto it = material_look_up.find(key); it != material_look_up.end()) {
-            return it->second;
-        } else {
-            std::cerr << "找不到material: " << key;
-            exit(-1);
+    template<class T>
+    class ResourceContainer{
+    public:
+        uint32_t find(const std::string& key) const{
+            return look_up.at(key);
         }
-    }
 
-    void add_material(const std::string &key, PhongMaterial &&material) {
-        uint32_t id = material_container.size();
-        material_container.emplace_back(material);
-        material_look_up[key] = id;
-    }
-
-    uint32_t find_mesh(const std::string &key) {
-        if (auto it = mesh_look_up.find(key); it != mesh_look_up.end()) {
-            return it->second;
-        } else {
-            std::cerr << "找不到mesh: " << key;
-            exit(-1);
+        void add(const std::string& key, T&& item){
+            uint32_t id = container.size();
+            container.emplace_back(std::move(item));
+            look_up[key] = id;
         }
+
+        const T& get(uint32_t id) const{
+            return container[id];
+        }
+
+        void clear(){
+            look_up.clear();
+            container.clear();
+        }
+    private:
+        std::unordered_map<std::string, uint32_t> look_up;
+        std::vector<T> container;
+    };
+
+    ResourceContainer<Mesh> meshes;
+    ResourceContainer<Material> materials;
+    ResourceContainer<Shader> shaders;
+    ResourceContainer<Texture> textures;
+
+    void add_mesh(const std::string &key, const std::vector<Vertex> &vertices,
+                  const std::vector<unsigned int> &indices) {
+
+        unsigned int vao_id, ibo_id, vbo_id;
+        glGenVertexArrays(1, &vao_id);
+        glGenBuffers(1, &ibo_id);
+        glGenBuffers(1, &vbo_id);
+
+        glBindVertexArray(vao_id);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+
+        const unsigned int float_per_vertex = 8;
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vector3f));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                              (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+        checkError();
+        meshes.add(key, Mesh{vao_id, (uint32_t)indices.size()});
+
+        glBindVertexArray(0);
+
+        struct MeshResource : public ResouceItem {
+            unsigned int vao_id, ibo_id, vbo_id;
+
+            MeshResource(unsigned int vao_id, unsigned int ibo_id, unsigned int vbo_id)
+                : vao_id(vao_id), ibo_id(ibo_id), vbo_id(vbo_id) {}
+
+            virtual ~MeshResource() {
+                glDeleteVertexArrays(1, &vao_id);
+                glDeleteBuffers(1, &vbo_id);
+                glDeleteBuffers(1, &ibo_id);
+                checkError();
+            }
+        };
+
+        pool.emplace_back(std::make_unique<MeshResource>(vao_id, ibo_id, vbo_id));
     }
 
-    void add_mesh(const std::string &key, Mesh &&mesh) {
-        uint32_t id = mesh_container.size();
-        mesh_container.emplace_back(mesh);
-        mesh_look_up[key] = id;
+    void add_material(const std::string& key, const MaterialDesc& desc){
+        Material mat;
+        mat.shaderprogram_id = shaders.get(shaders.find(desc.shader_name)).id;
+        for(const auto& u : desc.uniforms){
+            unsigned int buffer_id;
+            glGenBuffers(1, &buffer_id);
+            glBindBuffer(GL_UNIFORM_BUFFER, buffer_id);
+            glBufferData(GL_UNIFORM_BUFFER, u.size, u.data, GL_STATIC_DRAW);
+
+            mat.uniforms.emplace_back(Material::UniformData{u.binding_id, buffer_id});
+
+            deconstructors.emplace_back([buffer_id](){
+                glDeleteBuffers(1, &buffer_id);
+            });
+        }
+        for(const auto& s : desc.samplers){
+            mat.samplers.emplace_back(
+                Material::SampleData{s.binding_id, textures.get(textures.find(s.texture_key)).texture_id}
+            );
+        }
+
+        materials.add(key, std::move(mat));
     }
 
-    const Mesh &get_mesh(uint32_t id) { return mesh_container[id]; }
+    void add_texture(const std::string& key, const std::string &vs_path){
+        FIBITMAP* pImage = FreeImage_Load(
+        FreeImage_GetFileType(vs_path.c_str(), 0),
+        vs_path.c_str());
+        pImage = FreeImage_ConvertTo24Bits(pImage);
+        
+        unsigned int nWidth = FreeImage_GetWidth(pImage);
+        unsigned int nHeight = FreeImage_GetHeight(pImage);
 
-    const PhongMaterial &get_material(uint32_t id) { return material_container[id]; }
+        unsigned int texture_id;
+        glGenTextures(1, &texture_id);
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nWidth, nHeight,
+            0, GL_RGB, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(pImage));
+
+        FreeImage_Unload(pImage);
+
+        textures.add(key, Texture{texture_id});
+
+        deconstructors.emplace_back([texture_id](){
+            glDeleteTextures(1, &texture_id);
+        });
+    }
+
+    void add_shader(const std::string& key, const std::string &vs_path, const std::string &ps_path){
+        unsigned int program_id = complie_shader_program(vs_path, ps_path);
+
+        shaders.add(key, Shader{program_id});
+
+        struct ShaderProgramResource: ResouceItem{
+            unsigned int id;
+
+            ShaderProgramResource(unsigned int id): id(id) {}
+
+            virtual ~ShaderProgramResource(){
+                glDeleteProgram(id);
+            }
+        };
+
+        pool.emplace_back(std::make_unique<ShaderProgramResource>(program_id));
+
+    }
     // 保存在退出时释放
     template <class T> void add_raw_resource(T &&item) { pool.emplace_back(std::make_unique<T>(std::move(item))); }
 
+    void clear(){
+        meshes.clear();
+        materials.clear();
+        shaders.clear();
+        pool.clear();
+        for(auto& de : deconstructors){
+            de();
+        }
+        deconstructors.clear();
+    }
 private:
-    std::unordered_map<std::string, uint32_t> mesh_look_up;
-    std::vector<Mesh> mesh_container;
-
-    std::unordered_map<std::string, uint32_t> material_look_up;
-    std::vector<PhongMaterial> material_container;
 
     std::vector<std::unique_ptr<ResouceItem>> pool; // 保存在这里以析构释放资源
+    std::vector<std::function<void()>> deconstructors;
 } resources;
 
 struct GameObjectPart {
@@ -516,7 +743,7 @@ struct GameObjectPart {
 
     GameObjectPart(const std::string &mesh_name, const std::string &material_name,
                    const uint32_t topology = GL_TRIANGLES, const Matrix model_matrix = Matrix::identity())
-        : mesh_id(resources.find_mesh(mesh_name)), material_id(resources.find_material(material_name)),
+        : mesh_id(resources.meshes.find(mesh_name)), material_id(resources.materials.find(material_name)),
           topology(topology), model_matrix(model_matrix) {}
 
 private:
@@ -556,6 +783,8 @@ public:
         GameObjectPart &p = parts.emplace_back(part);
         p.base_transform = relate_model_matrix * p.model_matrix;
     }
+
+    virtual ~GObject() = default;
 
 private:
     friend class World;
@@ -641,6 +870,45 @@ private:
     std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
 };
 
+template<class T>
+struct WritableUniformBuffer{
+    //在初始化opengl后才能初始化
+    void init(){
+        assert(id == 0);
+        glGenBuffers(1, &id);
+        glBindBuffer(GL_UNIFORM_BUFFER, id);
+        glBufferData(GL_UNIFORM_BUFFER, sizeof(T), nullptr, GL_DYNAMIC_DRAW);
+    }
+
+    T* map(){
+        void* ptr = glMapNamedBuffer(id, GL_WRITE_ONLY);
+        assert(ptr != nullptr);
+        return (T*)ptr;
+    }
+    void unmap(){
+        bool ret = glUnmapNamedBuffer(id);
+        assert(ret);
+    }
+
+    unsigned int get_id() const{
+        return id;
+    }
+
+    void clear(){
+        glDeleteBuffers(1, &id);
+        id = 0;
+    }
+private:
+    unsigned int id = 0;
+};
+
+struct PerFrameData{
+    Matrix view_perspective_matrix;
+};
+
+struct PerObjectData{
+    Matrix object_matrix;
+};
 struct RenderInfo {
     struct Viewport {
         GLint x;
@@ -648,10 +916,28 @@ struct RenderInfo {
         GLsizei width;
         GLsizei height;
     } main_viewport;
+
+    WritableUniformBuffer<PerFrameData> per_frame_uniform;
+    WritableUniformBuffer<PerObjectData> per_object_uniform;
+
+    void init(){
+        per_frame_uniform.init();
+        per_object_uniform.init();
+    }
+
+    void clear(){
+        per_frame_uniform.clear();
+        per_object_uniform.clear();
+    }
 };
 
 World world;
 RenderInfo render_info;
+
+void bind_standard_uniform(){
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
+}
 
 void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
     render_info.main_viewport = {x, y, width, height};
@@ -659,8 +945,21 @@ void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
 }
 
 void setup_opengl() {
+    glewExperimental = GL_TRUE;
+    GLenum err = glewInit();
+    if (err != GLEW_OK) {
+        std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
+    }
+
+    if (!GLEW_ARB_compatibility) {
+        std::cerr << "系统不支持旧的API" << std::endl;
+        exit(-1);
+    }
+    const char *vendorName = reinterpret_cast<const char *>(glGetString(GL_VENDOR));
+    const char *version = reinterpret_cast<const char *>(glGetString(GL_VERSION));
+    std::cout << vendorName << ": " << version << std::endl;
+
     glClearColor(0.0, 0.0, 0.0, 0.0);
-    // glShadeModel(GL_FLAT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
@@ -674,19 +973,24 @@ void setup_opengl() {
 void GObject::render() {
     {
         for (const GameObjectPart &p : parts) {
-            const Mesh &mesh = resources.get_mesh(p.mesh_id);
-            const PhongMaterial &material = resources.get_material(p.material_id);
+            auto data = render_info.per_object_uniform.map();
+            data->object_matrix = p.base_transform.transpose();
+            //data->object_matrix = Matrix::identity();
+            render_info.per_object_uniform.unmap();
 
-            // glMaterialfv(GL_FRONT, GL_DIFFUSE, material.diffusion.data());
+            // glBindBuffer(GL_UNIFORM_BUFFER, render_info.per_object_uniform.get_id());
+            // glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix), p.base_transform.transpose().data());
 
-            glLoadMatrixf(p.base_transform.transpose().data());
-            glBegin(p.topology);
+            const Material &material = resources.materials.get(p.material_id);
+            material.bind();
+
+            const Mesh &mesh = resources.meshes.get(p.mesh_id);
+
             for (uint32_t i = 0; i < mesh.indices_count; i++) {
-                const Vertex &v = mesh.vertices[mesh.indices[i]];
-                glColor3fv(v.color.data());
-                glVertex3fv(v.position.data());
+                glBindVertexArray(mesh.VAO_id);
+                glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_INT, 0);
+                checkError();
             }
-            glEnd();
         }
     }
 }
@@ -712,7 +1016,7 @@ const std::vector<Vertex> plane_vertices = {
     {{-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
 };
 
-const std::vector<unsigned int> plane_indices = {2, 1, 0, 3, 2, 0};
+const std::vector<unsigned int> plane_indices = {3, 2, 0, 2, 1, 0};
 
 const std::vector<Vertex> line_vertices = {{{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
                                            {{1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}};
@@ -722,27 +1026,30 @@ const std::vector<unsigned int> line_indices = {0, 1};
 
 void init_resource() {
     RenderReousce &resource = resources;
-    Mesh cube_mesh{Assets::cube_vertices.data(), Assets::cube_indices.data(), (uint32_t)Assets::cube_indices.size()};
-    resource.add_mesh("cube", std::move(cube_mesh));
 
-    Mesh platform_mesh{Assets::platform_vertices.data(), Assets::cube_indices.data(),
-                       (uint32_t)Assets::cube_indices.size()};
+    resource.add_shader("single_color", 
+    "assets/shaders/single_color/vs.vert", 
+    "assets/shaders/single_color/ps.frag"
+    );
 
-    resource.add_mesh("platform", std::move(platform_mesh));
+    resource.add_mesh("cube", Assets::cube_vertices, Assets::cube_indices);
+    resource.add_mesh("platform", Assets::platform_vertices, Assets::cube_indices);
+    resource.add_mesh("default", {}, {});
 
-    Mesh default_mesh{{}, {}, 0};
+    MaterialDesc green_material_desc;
+    Vector3f color_green{0.0f, 1.0f, 0.0f};
+    green_material_desc.shader_name = "single_color";
+    green_material_desc.uniforms.emplace_back(
+        MaterialDesc::UniformDataDesc{
+            2,
+            sizeof(Vector3f),
+            &color_green
+        }
+    );
+    resource.add_material("default", green_material_desc);
 
-    resource.add_mesh("default", std::move(default_mesh));
-
-    PhongMaterial default_material{{1.0f, 1.0f, 1.0f}, 15.0f};
-    resource.add_material("default", std::move(default_material));
-
-    Mesh line_mesh{Assets::line_vertices.data(), Assets::line_indices.data(), (uint32_t)Assets::line_indices.size()};
-    resource.add_mesh("line", std::move(line_mesh));
-
-    Mesh plane_mesh{Assets::plane_vertices.data(), Assets::plane_indices.data(),
-                    (uint32_t)Assets::plane_indices.size()};
-    resource.add_mesh("plane", std::move(plane_mesh));
+    resource.add_mesh("line", Assets::line_vertices, Assets::line_indices);
+    resource.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
 
     // 生产circle的顶点
     std::vector<Vertex> circle_vertices(101);
@@ -766,18 +1073,7 @@ void init_resource() {
     circle_indices[298] = 1;
     circle_indices[299] = 100;
 
-    Mesh circle_mesh{circle_vertices.data(), circle_indices.data(), (uint32_t)circle_indices.size()};
-
-    struct MeshResouce : ResouceItem {
-        std::vector<Vertex> circle_vertices;
-        std::vector<unsigned int> circle_indices;
-    } stroage;
-    stroage.circle_vertices = std::move(circle_vertices);
-    stroage.circle_indices = std::move(circle_indices);
-
-    resource.add_raw_resource(std::move(stroage));
-
-    resource.add_mesh("circle", std::move(circle_mesh));
+    resource.add_mesh("circle", circle_vertices, circle_indices);
 }
 
 void init_start_scene() {
@@ -797,16 +1093,18 @@ void init_start_scene() {
     }
     {
         world.create_object(
-            GObjectDesc{{{0.0f, 10.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {5.0f, 5.0f, 5.0f}}, {{"plane", "default"}}});
+            GObjectDesc{
+                {
+                    {0.0f, 5.0f, -10.0f}, 
+                    {0.0f, 0.0f, 0.0f}, 
+                    {1.0f, 1.0f, 1.0f}}, 
+                    {{"plane", "default"}
+                    }});
     }
     {
         auto platform = world.create_object();
         platform->add_part(GameObjectPart{"platform", "default"});
-        platform->transform = {
-            {0.0f, -2.0f, -10.0f},
-            {0.0f, 0.0f, 0.0f},
-            {4.0, 0.1, 4.0}
-        };
+        platform->transform = {{0.0f, -2.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {4.0, 0.1, 4.0}};
     }
 }
 
@@ -827,7 +1125,7 @@ void World::tick() {
     clock.update();
 
     for (const auto &[name, sys] : systems) {
-        if (sys->enable){
+        if (sys->enable) {
             sys->tick();
         }
     }
@@ -838,15 +1136,14 @@ void World::tick() {
 }
 
 void World::render() {
-    glDrawBuffer(GL_BACK); // 渲染到后缓冲区
+    //glDrawBuffer(GL_BACK); // 渲染到后缓冲区
     RenderInfo::Viewport &v = render_info.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glMatrixMode(GL_PROJECTION);
-    glLoadMatrixf(camera.get_view_perspective_matrix().transpose().data());
-
-    glMatrixMode(GL_MODELVIEW);
+    auto data = render_info.per_frame_uniform.map();
+    data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
+    render_info.per_frame_uniform.unmap();
 
     for (auto &[ptr, obj] : objects) {
         obj->render();
@@ -962,6 +1259,7 @@ int main(int argc, char **argv) {
     glutPassiveMotionFunc(handle_mouse_move);
 
     setup_opengl();
+    render_info.init();
     init_resource();
     init_start_scene();
 
@@ -970,5 +1268,10 @@ int main(int argc, char **argv) {
     world.clock.update();
 
     glutMainLoop();
+
+    //可惜这些代码都不能执行
+    resources.clear();
+    render_info.clear();
+    std::cout << "Normal Exit!\n";
     return 0;
 }
