@@ -1,12 +1,326 @@
-#include <CGmath.h>
+#include <assert.h>
 #include <chrono>
+#include <cmath>
 #include <gl/glut.h>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+
+
+#define NOGDICAPMASKS
+#define NOSYSMETRICS
+// #define NOMENUS
+// #define NOICONS
+// #define NOKEYSTATES
+#define NOSYSCOMMANDS
+#define NORASTEROPS
+#define OEMRESOURCE
+#define NOATOM
+#define NOCOLOR
+// #define NOCTLMGR
+#define NODRAWTEXT
+// #define NOGDI
+#define NOKERNEL
+// #define NONLS
+#define NOMEMMGR
+#define NOMETAFILE
+// #define NOMINMAX
+// #define NOMSG
+#define NOSCROLL
+#define NOSERVICE
+#define NOSOUND
+#define NOTEXTMETRIC
+#define NOWH
+#define NOWINOFFSETS
+#define NOCOMM
+#define NOKANJI
+#define NOHELP
+#define NOPROFILER
+#define NODEFERWINDOWPOS
+#define NOMCX
+
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
+
+static float Q_rsqrt(float number) {
+    long i;
+    float x2, y;
+    const float threehalfs = 1.5F;
+
+    x2 = number * 0.5F;
+    y = number;
+    i = *(long *)&y;           // evil floating point bit level hacking
+    i = 0x5f3759df - (i >> 1); // what the fuck?
+    y = *(float *)&i;
+    y = y * (threehalfs - (x2 * y * y)); // 1st iteration
+    // y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be
+    // removed
+
+    return y;
+}
+
+inline float to_radian(float angle) { return angle / 180.0f * 3.1415926535f; }
+
+struct Vector2f {
+    union {
+        struct {
+            float x, y;
+        };
+        float v[2];
+    };
+    Vector2f() : x(0), y(0) {}
+    Vector2f(float x, float y) : x(x), y(y) {}
+
+    Vector2f operator+(const Vector2f b) { return Vector2f(x + b.x, y + b.y); }
+
+    Vector2f operator-(const Vector2f b) { return Vector2f(x - b.x, y - b.y); }
+
+    Vector2f operator*(const float s) { return Vector2f(x * s, y * s); }
+
+    float squared() { return x * x + y * y; }
+
+    float length() { return sqrtf(squared()); }
+
+    Vector2f normalized() {
+        float s = Q_rsqrt(squared());
+        return Vector2f(x * s, y * s);
+    }
+
+    Vector2f rotate(float radiam) {
+        return Vector2f(x * cosf(radiam) + y * sinf(radiam), x * -sinf(radiam) + y * cosf(radiam));
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const Vector2f &v) {
+        os << "(" << v.x << ", " << v.y << ")";
+        return os;
+    }
+};
+
+struct Color {
+    float r, g, b;
+
+    inline const float *data() const { return (float *)this; }
+
+    inline bool operator==(const Color &ps) { return r == ps.r && g == ps.g && b == ps.b; }
+
+    inline bool operator!=(const Color &ps) { return !(*this == ps); }
+};
+
+struct Vector3f {
+    union {
+        struct {
+            float x, y, z;
+        };
+        float v[3];
+    };
+
+    Vector3f() {}
+    Vector3f(float x, float y, float z) : x(x), y(y), z(z) {}
+
+    const float *data() const { return (float *)v; }
+
+    inline float operator[](const unsigned int i) const { return v[i]; }
+
+    inline Vector3f operator+(const Vector3f b) const { return Vector3f{x + b.x, y + b.y, z + b.z}; }
+
+    inline Vector3f operator-(const Vector3f b) const { return Vector3f{x - b.x, y - b.y, z - b.z}; }
+
+    inline Vector3f operator-() const { return Vector3f{-x, -y, -z}; }
+
+    inline Vector3f operator+=(const Vector3f b) { return *this = *this + b; }
+
+    inline Vector3f operator*(const float n) { return {x * n, y * n, z * n}; }
+    inline Vector3f operator/(const float n) { return *this * (1.0f / n); }
+
+    inline float dot(const Vector3f b) const { return x * b.x + y * b.y + z * b.z; }
+
+    inline Vector3f cross(const Vector3f b) {
+        return {this->y * b.z - this->z * b.y, this->z * b.x * this->x * b.z, this->x * b.y - this->y * b.x};
+    }
+
+    inline float square() const { return this->dot(*this); }
+
+    inline Vector3f normalize() {
+        float inv_sqrt = Q_rsqrt(this->square());
+        return *this * inv_sqrt;
+    }
+
+    inline float length() const { return std::sqrt(square()); }
+
+    friend std::ostream &operator<<(std::ostream &os, const Vector3f &v) {
+        os << "(" << v.x << ", " << v.y << ", " << v.z << ")";
+        return os;
+    }
+};
+
+struct Matrix {
+    float m[4][4];
+
+    Matrix() {}
+    constexpr Matrix(float m00, float m01, float m02, float m03, float m10, float m11, float m12, float m13, float m20,
+                     float m21, float m22, float m23, float m30, float m31, float m32, float m33)
+        : m{{m00, m01, m02, m03}, {m10, m11, m12, m13}, {m20, m21, m22, m23}, {m30, m31, m32, m33}} {}
+
+    const float *data() const { return (float *)m; }
+
+    inline Matrix transpose() const {
+        Matrix r;
+        for (unsigned int i = 0; i < 4; i++) {
+            for (unsigned int j = 0; j < 4; j++) {
+                r.m[i][j] = this->m[j][i];
+            }
+        }
+        return r;
+    }
+
+    constexpr static Matrix identity() {
+        Matrix m{
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        };
+
+        return m;
+    }
+
+    inline Matrix operator*(const Matrix &m) const {
+        Matrix r;
+        for (unsigned int i = 0; i < 4; i++) {
+            for (unsigned int j = 0; j < 4; j++) {
+                r.m[i][j] = this->m[i][0] * m.m[0][j] + this->m[i][1] * m.m[1][j] + this->m[i][2] * m.m[2][j] +
+                            this->m[i][3] * m.m[3][j];
+            }
+        }
+        return r;
+    }
+    // 沿z轴顺时针旋转roll，沿x轴顺时针旋转pitch，沿y轴顺时针旋转yaw
+    inline static Matrix rotate(float roll, float pitch, float yaw) {
+        float s_p = sin(pitch), c_p = cos(pitch);
+        float s_r = sin(roll), c_r = cos(roll);
+        float s_y = sin(yaw), c_y = cos(yaw);
+        Matrix m{-s_p * s_r * s_y + c_r * c_y,
+                 -s_p * s_y * c_r - s_r * c_y,
+                 -s_y * c_p,
+                 0.0,
+                 s_r * c_p,
+                 c_p * c_r,
+                 -s_p,
+                 0.0,
+                 s_p * s_r * c_y + s_y * c_r,
+                 s_p * c_r * c_y - s_r * s_y,
+                 c_p * c_y,
+                 0.0,
+                 0.0,
+                 0.0,
+                 0.0,
+                 1.0};
+        return m;
+    }
+
+    inline static Matrix rotate(Vector3f rotate) { return Matrix::rotate(rotate.x, rotate.y, rotate.z); }
+
+    inline static Matrix translate(float x, float y, float z) {
+        Matrix m{
+            1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, y, 0.0, 0.0, 1.0, z, 0.0, 0.0, 0.0, 1.0,
+        };
+        return m;
+    }
+
+    inline static Matrix translate(Vector3f delta) { return Matrix::translate(delta.x, delta.y, delta.z); }
+
+    inline static Matrix scale(float x, float y, float z) {
+        Matrix m{
+            x, 0.0, 0.0, 0.0, 0.0, y, 0.0, 0.0, 0.0, 0.0, z, 0.0, 0.0, 0.0, 0.0, 1.0,
+        };
+
+        return m;
+    }
+
+    inline static Matrix scale(Vector3f scale) { return Matrix::scale(scale.x, scale.y, scale.z); }
+};
+
+inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
+    assert(near_z < far_z); // 不要写反了！！！！！！！！！！
+    float SinFov = std::sin(fov * 0.5f);
+    float CosFov = std::cos(fov * 0.5f);
+
+    float Height = CosFov / SinFov;
+    float Width = Height / ratio;
+
+    return Matrix{Width,
+                  0.0f,
+                  0.0f,
+                  0.0f,
+                  0.0f,
+                  Height,
+                  0.0f,
+                  0.0f,
+                  0.0f,
+                  0.0f,
+                  -far_z / (far_z - near_z),
+                  -1.0f,
+                  0.0f,
+                  0.0f,
+                  -far_z * near_z / (far_z - near_z),
+                  0.0f}
+        .transpose();
+}
+
+// struct Quaternion {
+// 	float x, y, z, w;
+
+//     static constexpr Quaternion no_rotate(){
+//         return Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
+//     }
+
+// 	//需要axis长度为1
+// 	static Quaternion from_rotation(Vector3f axis, float angle) {
+// 		angle = angle * 0.5f;
+// 		float sin_theta = sinf(angle), cos_theta = cosf(angle);
+// 		return Quaternion{ sin_theta * axis.x, sin_theta * axis.y
+// ,sin_theta * axis.z, cos_theta };
+// 	}
+
+// 	//按XYZ顺序顺时针，沿X旋转的角度，沿Y旋转的角度，沿Z旋转的角度
+// 	static Quaternion from_eular(Vector3f rotate) {
+// 		return
+// 			Quaternion::from_rotation({ 1.0f, 0.0f, 0.0f }, rotate.x)
+// * 			Quaternion::from_rotation({ 0.0f, 1.0f, 0.0f }, rotate.y) *
+// 			Quaternion::from_rotation({ 0.0f, 0.0f, 1.0f },
+// rotate.z);
+
+// 	}
+
+// 	//需要长度为1
+// 	Matrix4f to_matrix() const{
+// 		return Matrix4f{ {{
+// 			1.0f - 2.0f * (y * y + z * z), 2.0f * (x * y - w * z), 2.0f *
+// (x * z + w * y), 0.0f, 			2.0f * (x * y + w * z),1.0f - 2.0f * (x * x + z *
+// z), 2.0f * (y * z - w * x), 0.0f, 			2.0f * (x * z - w * y), 2.0f * (y * z + w *
+// x), 1.0f - 2.0f * (x * x + y * y), 0.0f, 			0.0f,0.0f,0.0f,1.0f
+// 		}} };
+// 	}
+
+// 	Vector3f rotate_vector(Vector3f src) const{
+// 		const Quaternion& q = *this;
+// 		Quaternion p{ src.x, src.y, src.z, 1.0f };
+// 		Quaternion rotated = q * p * q.conjugate();
+// 		return Vector3f{ rotated.x, rotated.y, rotated.z };
+// 	}
+
+// 	Quaternion conjugate() const{
+// 		return Quaternion{ -x, -y, -z, w };
+// 	}
+
+// 	Quaternion operator* (const Quaternion r) const{
+// 		Vector3f qv{ x, y, z }, rv{ r.x, r.y, r.z };
+// 		Vector3f v = qv.cross(rv) + qv * r.w + rv * w;
+
+// 		return Quaternion{ v.x, v.y, v.z, w * r.w - qv.dot(rv) };
+// 	}
+// };
 
 inline void checkError() {
     GLenum error;
@@ -40,54 +354,43 @@ public:
 
 class InputHandler {
 public:
-	InputHandler() {
-		clear_mouse_state();
-	}
+    InputHandler() { clear_mouse_state(); }
 
-	inline Vector2f get_mouse_position() const {
-		return mouse_position;
-	}
+    inline Vector2f get_mouse_position() const { return mouse_position; }
 
-    inline Vector2f get_mouse_move() const {
-        return mouse_delta;
-    }
+    inline Vector2f get_mouse_move() const { return mouse_delta; }
 
-	inline bool is_left_button_down()  const {
-		return mouse_state & (1 << mouse_button_map(GLUT_LEFT_BUTTON));
-	}
+    inline bool is_left_button_down() const { return mouse_state & (1 << mouse_button_map(GLUT_LEFT_BUTTON)); }
 
-	inline bool is_right_button_down()  const {
-		return mouse_state & (1 << mouse_button_map(GLUT_RIGHT_BUTTON));
-	}
+    inline bool is_right_button_down() const { return mouse_state & (1 << mouse_button_map(GLUT_RIGHT_BUTTON)); }
 
-    inline bool is_middle_button_down()  const {
-		return mouse_state & (1 << mouse_button_map(GLUT_MIDDLE_BUTTON));
-	}
+    inline bool is_middle_button_down() const { return mouse_state & (1 << mouse_button_map(GLUT_MIDDLE_BUTTON)); }
 
 private:
     friend void handle_mouse_click(int button, int state, int x, int y);
     friend void handle_mouse_move(int x, int y);
-	Vector2f mouse_position;
+    Vector2f mouse_position;
     Vector2f mouse_delta;
     uint32_t mouse_state;
 
-    //这个需要每一帧清理
+    // 这个需要每一帧清理
     friend void loop_func();
-    void clear_mouse_move(){
-        mouse_delta = Vector2f(0.0f, 0.0f);
-    }
+    void clear_mouse_move() { mouse_delta = Vector2f(0.0f, 0.0f); }
 
-	void clear_mouse_state() {
-		mouse_position = Vector2f(0.5f, 0.5f);
+    void clear_mouse_state() {
+        mouse_position = Vector2f(0.5f, 0.5f);
         mouse_delta = Vector2f(0.0f, 0.0f);
         mouse_state = 0;
-	}
+    }
 
-    static constexpr unsigned char mouse_button_map(int button){
+    static constexpr unsigned char mouse_button_map(int button) {
         switch (button) {
-            case GLUT_LEFT_BUTTON: return 0;
-            case GLUT_MIDDLE_BUTTON: return 1;
-            case GLUT_RIGHT_BUTTON: return 2;
+        case GLUT_LEFT_BUTTON:
+            return 0;
+        case GLUT_MIDDLE_BUTTON:
+            return 1;
+        case GLUT_RIGHT_BUTTON:
+            return 2;
         }
         return 3;
     }
@@ -211,9 +514,10 @@ struct GameObjectPart {
     uint32_t topology = GL_TRIANGLES;
     Matrix model_matrix = Matrix::identity();
 
-    GameObjectPart(const std::string& mesh_name, const std::string& material_name, const uint32_t topology = GL_TRIANGLES, const Matrix model_matrix = Matrix::identity())
-    : mesh_id(resources.find_mesh(mesh_name)), material_id(resources.find_material(material_name)), topology(topology), model_matrix(model_matrix) 
-    {}
+    GameObjectPart(const std::string &mesh_name, const std::string &material_name,
+                   const uint32_t topology = GL_TRIANGLES, const Matrix model_matrix = Matrix::identity())
+        : mesh_id(resources.find_mesh(mesh_name)), material_id(resources.find_material(material_name)),
+          topology(topology), model_matrix(model_matrix) {}
 
 private:
     friend class GObject;
@@ -236,10 +540,10 @@ public:
     GObject(GObjectDesc &&desc) : transform(desc.transform), parts(std::move(desc.parts)){};
 
     // 可以重载
-    virtual void tick(){
-        if (is_relat_dirty){
+    virtual void tick() {
+        if (is_relat_dirty) {
             relate_model_matrix = transform.transform_matrix();
-            for(GameObjectPart& p : parts){
+            for (GameObjectPart &p : parts) {
                 p.base_transform = relate_model_matrix * p.model_matrix;
             }
             is_relat_dirty = false;
@@ -247,6 +551,11 @@ public:
     };
 
     virtual void render();
+
+    void add_part(const GameObjectPart &part) {
+        GameObjectPart &p = parts.emplace_back(part);
+        p.base_transform = relate_model_matrix * p.model_matrix;
+    }
 
 private:
     friend class World;
@@ -279,14 +588,13 @@ class ISystem {
 public:
     bool enable;
 
-    ISystem(const std::string& name, bool enable=true): enable(enable), name(name){}
-    const std::string& get_name() const{
-        return name;
-    }
+    ISystem(const std::string &name, bool enable = true) : enable(enable), name(name) {}
+    const std::string &get_name() const { return name; }
 
     virtual void tick() = 0;
 
     virtual ~ISystem() = default;
+
 private:
     const std::string name;
 };
@@ -313,18 +621,14 @@ public:
         assert(i != 0); // 试图删除不存在的object
     }
 
-    void register_system(ISystem* system) {
+    void register_system(ISystem *system) {
         assert(system != nullptr && systems.find(system->get_name()) == systems.end());
         systems.emplace(system->get_name(), system);
     }
 
-    ISystem* get_system(const std::string& name){
-        return systems.at(name).get();
-    }
+    ISystem *get_system(const std::string &name) { return systems.at(name).get(); }
 
-    void remove_system(const std::string& name){
-        systems.erase(name);
-    }
+    void remove_system(const std::string &name) { systems.erase(name); }
 
     void tick();
 
@@ -488,24 +792,22 @@ void init_start_scene() {
     }
 
     {
-        world.create_object(GObjectDesc{{{0.0f, 0.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
-                                        {{"cube", "default"}}});
+        world.create_object(
+            GObjectDesc{{{0.0f, 0.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"cube", "default"}}});
     }
-    // {
-    //     create_object(GObjectDesc{
-    //         {0.0f, 10.0f, -10.0f},
-    //         {0.0f, 0.0f, 0.0f},
-    //         {5.0f, 5.0f, 5.0f},
-    //         {GameObjectPartDesc{"plane", "default"}}
-    //     });
-    // }
-    // {
-    //     GObject &platform = this->objects.at(this->create_object());
-    //     platform.set_parts().emplace_back(
-    //         GameObjectPartDesc{"platform", "default"});
-    //     platform.set_position({0.0, -2.0, -10.0});
-    //     platform.set_scale({4.0, 0.1, 4.0});
-    // }
+    {
+        world.create_object(
+            GObjectDesc{{{0.0f, 10.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {5.0f, 5.0f, 5.0f}}, {{"plane", "default"}}});
+    }
+    {
+        auto platform = world.create_object();
+        platform->add_part(GameObjectPart{"platform", "default"});
+        platform->transform = {
+            {0.0f, -2.0f, -10.0f},
+            {0.0f, 0.0f, 0.0f},
+            {4.0, 0.1, 4.0}
+        };
+    }
 }
 
 inline unsigned int calculate_fps(float delta_time) {
@@ -524,8 +826,10 @@ inline unsigned int calculate_fps(float delta_time) {
 void World::tick() {
     clock.update();
 
-    for(const auto& [name, sys] : systems){
-        sys->tick();
+    for (const auto &[name, sys] : systems) {
+        if (sys->enable){
+            sys->tick();
+        }
     }
 
     for (auto &[ptr, obj] : objects) {
@@ -632,7 +936,7 @@ public:
             world.camera.rotation = {0.0, 0.0, 0.0};
         }
     }
-  
+
     void tick() override {
         handle_keyboard(world.clock.get_delta());
         handle_mouse();
@@ -652,9 +956,7 @@ int main(int argc, char **argv) {
 
     glutIdleFunc(loop_func);
     glutDisplayFunc([]() {});
-    glutReshapeFunc([] (int w, int h){
-        set_viewport(0, 0, w, h);
-    });
+    glutReshapeFunc([](int w, int h) { set_viewport(0, 0, w, h); });
     glutMouseFunc(handle_mouse_click);
     glutMotionFunc(handle_mouse_move);
     glutPassiveMotionFunc(handle_mouse_move);
