@@ -1040,10 +1040,10 @@ const std::vector<unsigned int> cube_indices = {1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2,
                                                 2, 6, 5, 5, 1, 2, 4, 5, 6, 6, 7, 4, 5, 4, 0, 0, 1, 5};
 
 const std::vector<Vertex> plane_vertices = {
-    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, 1.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, -1.0f}},
-    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, -1.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
 };
 
 const std::vector<unsigned int> plane_indices = {3, 2, 0, 2, 1, 0};
@@ -1085,11 +1085,11 @@ void init_resource() {
     // 生产circle的顶点
     std::vector<Vertex> circle_vertices(101);
     // 中心点为{0, 0, 0}，半径为1，100边型，101个顶点
-    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}; // 中心点
+    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
     for (size_t i = 1; i < 101; i++) {
         float angle = to_radian(360.0f / 100 * (i - 1));
-        circle_vertices[i] = {{sinf(angle), cosf(angle), 0.0f},
-                              {sinf(angle) / 2 + 1, cosf(angle) / 2 + 1, float(i) / 100}};
+        Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
+        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
     }
 
     std::vector<unsigned int> circle_indices(300); // 100个三角形
@@ -1133,6 +1133,10 @@ void init_start_scene() {
     {
         world.create_object(
             GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"plane", "wood_flat"}}});
+    }
+    {
+        world.create_object(
+            GObjectDesc{{{0.0f, 10.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"circle", "wood_flat"}}});
     }
     {
         auto platform = world.create_object();
