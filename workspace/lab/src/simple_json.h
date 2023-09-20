@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <fstream>
+#include <iostream>
 
 namespace SimpleJson {
 //极简json解析库，并没有完全实现json的所有解析功能，任何格式错误都可能导致死循环或者崩溃
@@ -15,42 +16,47 @@ enum JsonType { Null = 0, Bool = 1, Number = 2, String = 3, List = 4, Map = 5 };
 
 class JsonObject {
 public:
-    std::variant<json_null, bool, double, std::string, std::vector<std::unique_ptr<JsonObject>>,
-                 std::unordered_map<std::string, std::unique_ptr<JsonObject>>>
+    std::unique_ptr<std::variant<json_null, bool, double, std::string, std::vector<JsonObject>,
+                 std::unordered_map<std::string, JsonObject>>>
         inner;
 
-    JsonType get_type() const { return (JsonType)inner.index(); }
+    JsonObject() : inner(std::make_unique<decltype(inner)::element_type>()) {}
+    JsonType get_type() const { return (JsonType)inner->index(); }
 
-    const std::unique_ptr<JsonObject>& operator[](size_t i) const{
-        return std::get<List>(inner)[i];
+    const JsonObject& operator[](size_t i) const{
+        return std::get<List>(*inner)[i];
     }
 
-    const std::unique_ptr<JsonObject>& operator[](const std::string& key) const{
-        return std::get<JsonType::Map>(inner).at(key);
+    const JsonObject& operator[](const std::string& key) const{
+        return std::get<JsonType::Map>(*inner).at(key);
     }
 
     bool is_null() const{
-        return inner.index() == Null;
+        return inner->index() == Null;
     }
 
-    const std::vector<std::unique_ptr<JsonObject>>& get_list() const{
-        return std::get<List>(inner);
+    const std::vector<JsonObject>& get_list() const{
+        return std::get<List>(*inner);
     }
 
-    const std::unordered_map<std::string, std::unique_ptr<JsonObject>>& get_map() const{
-        return std::get<JsonType::Map>(inner);
+    const std::unordered_map<std::string, JsonObject>& get_map() const{
+        return std::get<JsonType::Map>(*inner);
     }
 
     const std::string& get_string() const{
-        return std::get<JsonType::String>(inner);
+        return std::get<JsonType::String>(*inner);
     }
 
     double get_number() const{
-        return std::get<JsonType::Number>(inner);
+        return std::get<JsonType::Number>(*inner);
     }
 
+    uint64_t get_uint() const { return (uint64_t)get_number(); }
+
+    int64_t get_int() const { return (int64_t)get_number(); }
+
     bool get_bool() const{
-        return std::get<JsonType::Bool>(inner);
+        return std::get<JsonType::Bool>(*inner);
     }
 
     friend std::ostream &operator<<(std::ostream &os, const JsonObject &json) {
@@ -81,7 +87,7 @@ public:
                 } else {
                     is_first = false;
                 }
-                os << *i;
+                os << i;
             }
             os << "]";
             break;
@@ -95,7 +101,7 @@ public:
                 } else {
                     is_first = false;
                 }
-                os << '\"' << key << '\"' << ": " << *i;
+                os << '\"' << key << '\"' << ": " << i;
             }
             os << "}";
             break;
@@ -152,12 +158,12 @@ inline double parse_number(const char **const start) {
     return (before_dot + after_dot) * sign;
 }
 
-inline std::unique_ptr<JsonObject> parse_object(const char **const start);
+inline JsonObject parse_object(const char **const start);
 
-inline std::unordered_map<std::string, std::unique_ptr<JsonObject>> parse_map(const char **const start) {
+inline std::unordered_map<std::string, JsonObject> parse_map(const char **const start) {
     assert(**start == '{');
     (*start)++;
-    std::unordered_map<std::string, std::unique_ptr<JsonObject>> inner_map;
+    std::unordered_map<std::string, JsonObject> inner_map;
     skip_empty(start);
     while (**start != '}') {
         std::string key = parse_string(start);
@@ -178,12 +184,12 @@ inline std::unordered_map<std::string, std::unique_ptr<JsonObject>> parse_map(co
     return inner_map;
 }
 
-inline std::vector<std::unique_ptr<JsonObject>> parse_list(const char **const start) {
+inline std::vector<JsonObject> parse_list(const char **const start) {
     assert(**start == '[');
     (*start)++;
     skip_empty(start);
 
-    std::vector<std::unique_ptr<JsonObject>> list;
+    std::vector<JsonObject> list;
     while (**start != ']') {
         list.push_back(parse_object(start));
         skip_empty(start);
@@ -197,34 +203,34 @@ inline std::vector<std::unique_ptr<JsonObject>> parse_list(const char **const st
     return list;
 }
 
-inline std::unique_ptr<JsonObject> parse_object(const char **const start) {
-    std::unique_ptr<JsonObject> object = std::make_unique<JsonObject>();
+inline JsonObject parse_object(const char **const start) {
+    JsonObject object;
     switch (**start) {
     case '\"': {
-        object->inner = parse_string(start);
+        *object.inner = parse_string(start);
         break;
     }
     case '{': {
-        object->inner = parse_map(start);
+        *object.inner = parse_map(start);
         break;
     }
     case '[': {
-        object->inner = parse_list(start);
+        *object.inner = parse_list(start);
         break;
     }
     case 'n': {
         match_and_skip(start, "null");
-        object->inner.emplace<json_null>();
+        object.inner->emplace<json_null>();
         break;
     }
     case 't': {
         match_and_skip(start, "true");
-        object->inner = true;
+        *object.inner = true;
         break;
     }
     case 'f': {
         match_and_skip(start, "false");
-        object->inner = false;
+        *object.inner = false;
         break;
     }
     case '0':
@@ -240,7 +246,7 @@ inline std::unique_ptr<JsonObject> parse_object(const char **const start) {
     case '.':
     case '-':
     {
-        object->inner = parse_number(start);
+        *object.inner = parse_number(start);
         break;
     }
 
@@ -254,13 +260,13 @@ inline std::unique_ptr<JsonObject> parse_object(const char **const start) {
 }
 } // namespace Impl
 
-inline std::unique_ptr<JsonObject> parse(const std::string &json_str) {
-    std::unique_ptr<JsonObject> obj;
+inline JsonObject parse(const std::string &json_str) {
+    JsonObject obj;
 
     const char* start = json_str.c_str();
     Impl::skip_empty(&start);
     if (*start == '\0'){
-        obj = std::make_unique<JsonObject>();
+        *obj.inner = json_null();
     } else {
         obj = Impl::parse_object(&start);
     }
@@ -270,13 +276,16 @@ inline std::unique_ptr<JsonObject> parse(const std::string &json_str) {
     return obj;
 }
 
-inline std::unique_ptr<JsonObject> parse_stream(std::istream& stream) {
+inline JsonObject parse_stream(std::istream& stream) {
     std::string str((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
     return parse(str);
 }
 
-inline std::unique_ptr<JsonObject> parse_file(const std::string &path) {
+inline JsonObject parse_file(const std::string &path) {
     std::ifstream file(path);
+    if (!file){
+        std::cerr << "Con't open file: " << path << std::endl;
+    }
     return parse_stream(file);
 }
 } // namespace SimpleJson

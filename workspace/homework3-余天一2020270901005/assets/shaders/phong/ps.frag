@@ -16,6 +16,7 @@ layout(binding = 0, std140) uniform per_frame
 {
     mat4 view_perspective_matrix; //16 * 4
     vec3 ambient_light; //3 * 4 + 4
+    vec3 camera_position;
     uint pointlight_num; // 4
     PointLight pointlight_list[POINTLIGNT_MAX];
 };

@@ -59,14 +59,14 @@ void init_render_resource() {
     std::vector<Vertex> circle_vertices(101);
     // 中心点为{0, 0, 0}，半径为1，100边型，101个顶点
     circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}; // 中心点
-    for (size_t i = 1; i < 101; i++) {
+    for (uint32_t i = 1; i < 101; i++) {
         float angle = to_radian(360.0f / 100 * (i - 1));
         circle_vertices[i] = {{sinf(angle), cosf(angle), 0.0f},
                               {sinf(angle) / 2 + 1, cosf(angle) / 2 + 1, float(i) / 100}};
     }
 
     std::vector<unsigned int> circle_indices(300); // 100个三角形
-    for (size_t i = 0; i <= 99; i++) {             // 前99个
+    for (uint32_t i = 0; i <= 99; i++) {             // 前99个
         // 逆时针
         circle_indices[i * 3] = 0;
         circle_indices[i * 3 + 1] = i + 2;

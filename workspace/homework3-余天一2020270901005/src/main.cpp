@@ -10,6 +10,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <variant>
 
 
 #define NOGDICAPMASKS
@@ -49,6 +50,298 @@
 #endif
 #include <Windows.h>
 #include <FreeImage.h>
+
+namespace SimpleJson {
+//极简json解析库，并没有完全实现json的所有解析功能，任何格式错误都可能导致死循环或者崩溃
+struct json_null {};
+
+enum JsonType { Null = 0, Bool = 1, Number = 2, String = 3, List = 4, Map = 5 };
+
+class JsonObject {
+public:
+    std::unique_ptr<std::variant<json_null, bool, double, std::string, std::vector<JsonObject>,
+                 std::unordered_map<std::string, JsonObject>>>
+        inner;
+
+    JsonObject() : inner(std::make_unique<decltype(inner)::element_type>()) {}
+    JsonType get_type() const { return (JsonType)inner->index(); }
+
+    const JsonObject& operator[](size_t i) const{
+        return std::get<List>(*inner)[i];
+    }
+
+    const JsonObject& operator[](const std::string& key) const{
+        return std::get<JsonType::Map>(*inner).at(key);
+    }
+
+    bool has(const std::string& key) const {
+        const std::unordered_map<std::string, JsonObject> &m = std::get<JsonType::Map>(*inner);
+        return m.find(key) != m.end();
+    }
+
+    bool is_null() const{
+        return inner->index() == Null;
+    }
+
+    const std::vector<JsonObject>& get_list() const{
+        return std::get<List>(*inner);
+    }
+
+    const std::unordered_map<std::string, JsonObject>& get_map() const{
+        return std::get<JsonType::Map>(*inner);
+    }
+
+    const std::string& get_string() const{
+        return std::get<JsonType::String>(*inner);
+    }
+
+    double get_number() const{
+        return std::get<JsonType::Number>(*inner);
+    }
+
+    uint64_t get_uint() const { 
+        return (uint64_t)get_number(); 
+    }
+
+    int64_t get_int() const { return (int64_t)get_number(); }
+
+    bool get_bool() const{
+        return std::get<JsonType::Bool>(*inner);
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const JsonObject &json) {
+        switch (json.get_type()) {
+
+        case Null:{
+            os << "null";
+            break;
+        }
+        case Bool:{
+            os << (json.get_bool() ? "true" : "false");
+            break;
+        }
+        case Number:{
+            os << json.get_number();
+            break;
+        }
+        case String:{
+            os << '\"' << json.get_string() << '\"';
+            break;
+        }
+        case List:{
+            os << "[";
+            bool is_first = true;
+            for(const auto& i : json.get_list()){
+                if (!is_first){
+                    os << ", ";
+                } else {
+                    is_first = false;
+                }
+                os << i;
+            }
+            os << "]";
+            break;
+        }
+        case Map:
+            os << "{";
+            bool is_first = true;
+            for(const auto& [key, i] : json.get_map()){
+                if (!is_first){
+                    os << ", ";
+                } else {
+                    is_first = false;
+                }
+                os << '\"' << key << '\"' << ": " << i;
+            }
+            os << "}";
+            break;
+        }
+        return os;
+    }
+};
+
+namespace Impl {
+inline void skip_empty(const char **const start) {
+    for (; **start == '\n' || **start == '\r' || **start == '\t' || **start == ' '; (*start)++)
+        ;
+}
+inline void match_and_skip(const char **const start, const char *str) {
+    for (; *str != '\0'; str++, (*start)++) {
+        assert(**start == *str);
+    }
+}
+
+inline std::string parse_string(const char **const start) {
+    assert(**start == '\"');
+    std::string str;
+    (*start)++;
+    for (; **start != '\"'; (*start)++) {
+        str.push_back(**start);
+    }
+    (*start)++; // 跳过后面的"号
+    return str;
+}
+
+inline bool is_number(char c) { return c <= '9' && c >= '0'; }
+inline double parse_number(const char **const start) {
+    assert(is_number(**start) || **start == '.' || **start == '-');
+    double sign = 1.0;
+    if (**start == '-'){
+        sign = -1.0;
+        (*start)++;
+    }
+    size_t before_dot = 0;
+    for (; is_number(**start); (*start)++) {
+        before_dot *= 10;
+        before_dot += (**start - '0');
+    }
+    double after_dot = 0;
+    double scale = 0.1;
+    if (**start == '.') {
+        (*start)++;
+        for (; is_number(**start); (*start)++) {
+            after_dot += (**start - '0') * scale;
+            scale /= 10.0;
+        }
+    }
+
+    return (before_dot + after_dot) * sign;
+}
+
+inline JsonObject parse_object(const char **const start);
+
+inline std::unordered_map<std::string, JsonObject> parse_map(const char **const start) {
+    assert(**start == '{');
+    (*start)++;
+    std::unordered_map<std::string, JsonObject> inner_map;
+    skip_empty(start);
+    while (**start != '}') {
+        std::string key = parse_string(start);
+        skip_empty(start);
+        assert(**start == ':');
+        (*start)++;
+        skip_empty(start);
+        inner_map.emplace(key, parse_object(start));
+        skip_empty(start);
+        assert(**start == ',' || **start == '}');
+        if (**start == ',') {
+            (*start)++;
+            skip_empty(start);
+        }
+    }
+    (*start)++;
+
+    return inner_map;
+}
+
+inline std::vector<JsonObject> parse_list(const char **const start) {
+    assert(**start == '[');
+    (*start)++;
+    skip_empty(start);
+
+    std::vector<JsonObject> list;
+    while (**start != ']') {
+        list.push_back(parse_object(start));
+        skip_empty(start);
+        if (**start == ',') {
+            (*start)++;
+            skip_empty(start);
+        }
+    }
+    (*start)++;
+
+    return list;
+}
+
+inline JsonObject parse_object(const char **const start) {
+    JsonObject object;
+    switch (**start) {
+    case '\"': {
+        *object.inner = parse_string(start);
+        break;
+    }
+    case '{': {
+        *object.inner = parse_map(start);
+        break;
+    }
+    case '[': {
+        *object.inner = parse_list(start);
+        break;
+    }
+    case 'n': {
+        match_and_skip(start, "null");
+        object.inner->emplace<json_null>();
+        break;
+    }
+    case 't': {
+        match_and_skip(start, "true");
+        *object.inner = true;
+        break;
+    }
+    case 'f': {
+        match_and_skip(start, "false");
+        *object.inner = false;
+        break;
+    }
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+    case '.':
+    case '-':
+    {
+        *object.inner = parse_number(start);
+        break;
+    }
+
+    default: {
+        assert(false);
+        break;
+    }
+    }
+
+    return object;
+}
+} // namespace Impl
+
+inline JsonObject parse(const std::string &json_str) {
+    JsonObject obj;
+
+    const char* start = json_str.c_str();
+    Impl::skip_empty(&start);
+    if (*start == '\0'){
+        *obj.inner = json_null();
+    } else {
+        obj = Impl::parse_object(&start);
+    }
+
+    Impl::skip_empty(&start);
+
+    assert(*start == '\0');
+
+    return obj;
+}
+
+inline JsonObject parse_stream(std::istream& stream) {
+    std::string str((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    return parse(str);
+}
+
+inline JsonObject parse_file(const std::string &path) {
+    std::ifstream file(path);
+    if (!file){
+        std::cerr << "Con't open file: " << path << std::endl;
+        exit(-1);
+    }
+    return parse_stream(file);
+}
+} // namespace SimpleJson
 
 static float Q_rsqrt(float number) {
     long i;
@@ -575,7 +868,7 @@ public:
         uint32_t find(const std::string &key) const { return look_up.at(key); }
 
         void add(const std::string &key, T &&item) {
-            uint32_t id = container.size();
+            uint32_t id = (uint32_t)container.size();
             container.emplace_back(std::move(item));
             look_up[key] = id;
         }
@@ -599,7 +892,7 @@ public:
 
     void add_mesh(const std::string &key,const Vertex* vertices, size_t vertex_count,
                   const unsigned int* const indices, size_t indices_count) {
-
+        std::cout << "Load mesh: " << key << std::endl;
         unsigned int vao_id, ibo_id, vbo_id;
         glGenVertexArrays(1, &vao_id);
         glGenBuffers(1, &ibo_id);
@@ -626,21 +919,12 @@ public:
 
         glBindVertexArray(0);
 
-        struct MeshResource : public ResouceItem {
-            unsigned int vao_id, ibo_id, vbo_id;
-
-            MeshResource(unsigned int vao_id, unsigned int ibo_id, unsigned int vbo_id)
-                : vao_id(vao_id), ibo_id(ibo_id), vbo_id(vbo_id) {}
-
-            virtual ~MeshResource() {
-                glDeleteVertexArrays(1, &vao_id);
-                glDeleteBuffers(1, &vbo_id);
-                glDeleteBuffers(1, &ibo_id);
-                checkError();
-            }
-        };
-
-        pool.emplace_back(std::make_unique<MeshResource>(vao_id, ibo_id, vbo_id));
+        deconstructors.emplace_back([vao_id, vbo_id, ibo_id](){
+            glDeleteVertexArrays(1, &vao_id);
+            glDeleteBuffers(1, &vbo_id);
+            glDeleteBuffers(1, &ibo_id);
+            checkError();
+        });
     }
 
     void add_mesh(const std::string &key,const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices){
@@ -648,6 +932,7 @@ public:
     }
 
     void add_material(const std::string &key, const MaterialDesc &desc) {
+        std::cout << "Load material: " << key << std::endl;
         Material mat;
         mat.shaderprogram_id = shaders.get(shaders.find(desc.shader_name)).program_id;
         for (const auto &u : desc.uniforms) {
@@ -669,6 +954,7 @@ public:
     }
 
     void add_texture(const std::string &key, const std::string &vs_path) {
+        std::cout << "Load texture: " << key << std::endl;
         FIBITMAP *pImage = FreeImage_Load(FreeImage_GetFileType(vs_path.c_str(), 0), vs_path.c_str());
         pImage = FreeImage_ConvertTo24Bits(pImage);
 
@@ -695,28 +981,119 @@ public:
     }
 
     void add_shader(const std::string &key, const std::string &vs_path, const std::string &ps_path) {
+        std::cout << "Load shader: " << key << std::endl;
         unsigned int program_id = complie_shader_program(vs_path, ps_path);
 
         shaders.add(key, Shader{program_id});
 
-        struct ShaderProgramResource : ResouceItem {
-            unsigned int id;
-
-            ShaderProgramResource(unsigned int id) : id(id) {}
-
-            virtual ~ShaderProgramResource() { glDeleteProgram(id); }
-        };
-
-        pool.emplace_back(std::make_unique<ShaderProgramResource>(program_id));
+        deconstructors.emplace_back([program_id](){
+            glDeleteProgram(program_id);
+        });
     }
-    // 保存在退出时释放
-    template <class T> void add_raw_resource(T &&item) { pool.emplace_back(std::make_unique<T>(std::move(item))); }
+
+    void load_gltf(const std::string &base_key, const std::string &path) {
+        std::string root = path;
+        for (; !(root.empty() || root.back() == '/' || root.back() == '\\'); root.pop_back())
+            ;
+        using Json = SimpleJson::JsonObject;
+        Json json = SimpleJson::parse_file(path);
+
+        struct Buffer {
+            void *ptr = nullptr;
+            size_t len;
+            Buffer(size_t len) : ptr(new char[len]), len(len) {}
+            ~Buffer() {
+                if (ptr != nullptr) {
+                    delete[] ptr;
+                }
+            }
+        };
+        std::vector<Buffer> buffers;
+        if (json.has("buffers")) {
+            for (const Json &buffer : json["buffers"].get_list()) {
+                std::string bin_path = root + buffer["uri"].get_string();
+                Buffer &b = buffers.emplace_back((size_t)buffer["byteLength"].get_number());
+                std::ifstream read(bin_path, std::ios_base::in | std::ios_base::binary);
+                read.read((char *)b.ptr, b.len);
+                read.close();
+            }
+        }
+        auto get_buffer = [&](size_t accessor_id) -> const Json & {
+            const Json &buffer_view =
+                json["bufferViews"][(size_t)json["accessors"][accessor_id]["bufferView"].get_number()];
+            return buffer_view;
+        };
+        //加载网格
+        if (json.has("meshes")) {
+            for (const Json &mesh : json["meshes"].get_list()) {
+                const std::string &key = base_key + '.' + mesh["name"].get_string();
+                const Json &primitive = mesh["primitives"][0];
+                const Json &indices_buffer = get_buffer((size_t)primitive["indices"].get_number());
+                const Json &position_buffer = get_buffer((size_t)primitive["attributes"]["POSITION"].get_number());
+                const Json &normal_buffer = get_buffer((size_t)primitive["attributes"]["NORMAL"].get_number());
+                const Json &uv_buffer = get_buffer((size_t)primitive["attributes"]["TEXCOORD_0"].get_number());
+
+                uint32_t indices_count = json["accessors"][primitive["indices"].get_uint()]["count"].get_uint();
+                std::vector<unsigned int> indices(indices_count);
+                uint16_t *ptr = (uint16_t *)((char*)buffers[indices_buffer["buffer"].get_uint()].ptr + indices_buffer["byteOffset"].get_uint());
+                for (uint32_t i = 0; i < indices_count; i++) {
+                    indices[i] = ptr[i];
+                }
+
+                uint32_t vertex_count = position_buffer["byteLength"].get_uint() / sizeof(Vector3f);
+                uint32_t normal_count = normal_buffer["byteLength"].get_uint() / sizeof(Vector3f);
+                uint32_t uv_count = uv_buffer["byteLength"].get_uint() / sizeof(Vector2f);
+                assert(vertex_count == normal_count && vertex_count == uv_count);
+                Vector3f *pos = (Vector3f *)((char*)buffers[position_buffer["buffer"].get_uint()].ptr + position_buffer["byteOffset"].get_uint());
+                Vector3f *normal =
+                    (Vector3f *)((char*)buffers[normal_buffer["buffer"].get_uint()].ptr + normal_buffer["byteOffset"].get_uint());
+                Vector2f *uv =
+                    (Vector2f *)((char*)buffers[uv_buffer["buffer"].get_uint()].ptr + uv_buffer["byteOffset"].get_uint());
+
+                std::vector<Vertex> vertices(vertex_count);
+                for (uint32_t i = 0; i < vertex_count; i++) {
+                    vertices[i] = {pos[i], normal[i], uv[i]};
+                }
+
+                add_mesh(key, vertices, indices);
+            } 
+        }
+        //加载纹理
+        if (json.has("images")) {
+            for (const Json &texture : json["images"].get_list()) {
+                const std::string &key = base_key + '.' + texture["name"].get_string();
+                add_texture(key, root + texture["uri"].get_string());
+            }
+        }
+
+        //加载材质
+        auto get_texture_key = [&](size_t index) -> std::string {
+            return base_key + '.' + json["images"][json["textures"][index]["source"].get_uint()]["name"].get_string();
+        };
+        if (json.has("materials")) {
+            for (const Json &material : json["materials"].get_list()) {
+                const std::string &key = base_key + '.' + material["name"].get_string();
+
+                const std::string normal_texture = get_texture_key(material["normalTexture"]["index"].get_uint());
+                const std::string basecolor_texture =
+                    get_texture_key(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
+                const std::string metallic_roughness_texture =
+                    get_texture_key(material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
+                float metallicFactor = (float)material["pbrMetallicRoughness"]["metallicFactor"].get_number();
+
+                MaterialDesc desc = {"pbr",
+                                     {{2, sizeof(float), &metallicFactor}},
+                                     {{0, basecolor_texture}, {1, normal_texture}, {2, metallic_roughness_texture}}};
+
+                add_material(key, desc);
+            }
+        }
+    }
 
     void clear() {
         meshes.clear();
         materials.clear();
         shaders.clear();
-        pool.clear();
         for (auto &de : deconstructors) {
             de();
         }
@@ -724,7 +1101,6 @@ public:
     }
 
 private:
-    std::vector<std::unique_ptr<ResouceItem>> pool; // 保存在这里以析构释放资源
     std::vector<std::function<void()>> deconstructors;
 } resources;
 
@@ -935,6 +1311,7 @@ struct PointLightData final {
 struct PerFrameData final {
     Matrix view_perspective_matrix;
     alignas(16) Vector3f ambient_light;  // 3 * 4 + 4
+    alignas(16) Vector3f camera_position;
     alignas(4) uint32_t pointlight_num; // 4
     PointLightData pointlight_list[POINTLIGNT_MAX];
 };
@@ -1035,11 +1412,6 @@ const std::vector<Vertex> cube_vertices = {{{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}}
                                            {{-1.0, -1.0, 1.0}, {0.0, 0.0, 1.0}},  {{1.0, -1.0, 1.0}, {1.0, 0.0, 1.0}},
                                            {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}},    {{-1.0, 1.0, 1.0}, {0.0, 1.0, 1.0}}};
 
-const std::vector<Vertex> platform_vertices = {
-    {{-1.0, -1.0, -1.0}, {0.5, 0.5, 0.5}}, {{1.0, -1.0, -1.0}, {0.5, 0.5, 0.5}}, {{1.0, 1.0, -1.0}, {0.5, 0.5, 0.5}},
-    {{-1.0, 1.0, -1.0}, {0.5, 0.5, 0.5}},  {{-1.0, -1.0, 1.0}, {0.5, 0.5, 0.5}}, {{1.0, -1.0, 1.0}, {0.5, 0.5, 0.5}},
-    {{1.0, 1.0, 1.0}, {0.5, 0.5, 0.5}},    {{-1.0, 1.0, 1.0}, {0.5, 0.5, 0.5}}};
-
 const std::vector<unsigned int> cube_indices = {1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2, 3, 7, 3, 0, 0, 4, 7,
                                                 2, 6, 5, 5, 1, 2, 4, 5, 6, 6, 7, 4, 5, 4, 0, 0, 1, 5};
 
@@ -1066,6 +1438,10 @@ void init_resource() {
     resource.add_shader("flat", "assets/shaders/flat/vs.vert", "assets/shaders/flat/ps.frag");
 
     resource.add_shader("phong", "assets/shaders/phong/vs.vert", "assets/shaders/phong/ps.frag");
+    resource.add_shader("pbr", "assets/shaders/pbr/vs.vert", "assets/shaders/pbr/ps.frag");
+
+    resource.load_gltf("wood_floor", "assets/materials/wood_floor_deck/wood_floor_deck_1k.gltf");
+    resource.load_gltf("teapot", "assets/model/teapot.gltf");
 
     resource.add_texture("wood_diffusion", "assets/materials/wood_flat/basecolor.jpg");
 
@@ -1074,7 +1450,6 @@ void init_resource() {
                           MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
 
     resource.add_mesh("cube", Assets::cube_vertices, Assets::cube_indices);
-    resource.add_mesh("platform", Assets::platform_vertices, Assets::cube_indices);
     resource.add_mesh("default", {}, {});
 
     MaterialDesc green_material_desc;
@@ -1090,14 +1465,14 @@ void init_resource() {
     std::vector<Vertex> circle_vertices(101);
     // 中心点为{0, 0, 0}，半径为1，100边型，101个顶点
     circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
-    for (size_t i = 1; i < 101; i++) {
+    for (uint32_t i = 1; i < 101; i++) {
         float angle = to_radian(360.0f / 100 * (i - 1));
         Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
         circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
     }
 
     std::vector<unsigned int> circle_indices(300); // 100个三角形
-    for (size_t i = 0; i <= 99; i++) {             // 前99个
+    for (uint32_t i = 0; i <= 99; i++) {           // 前99个
         // 逆时针
         circle_indices[i * 3] = 0;
         circle_indices[i * 3 + 1] = i + 2;
@@ -1136,7 +1511,7 @@ void init_start_scene() {
     }
     {
         world.create_object(
-            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"plane", "wood_flat"}}});
+            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "wood_flat"}}});
     }
     {
         world.create_object(
@@ -1144,7 +1519,7 @@ void init_start_scene() {
     }
     {
         auto platform = world.create_object();
-        platform->add_part(GameObjectPart{"platform", "default"});
+        platform->add_part(GameObjectPart{"cube", "default"});
         platform->transform = {{0.0f, -2.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {4.0, 0.1, 4.0}};
     }
 }
@@ -1184,6 +1559,7 @@ void World::render() {
 
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
+    data->camera_position = camera.position;
 
     if (is_light_dirty) {
         data->ambient_light = world.ambient_light;
