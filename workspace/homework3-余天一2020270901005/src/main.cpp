@@ -400,12 +400,10 @@ private:
 } input;
 
 void handle_mouse_move(int x, int y) {
-    // LOG_DEBUG("Real mouse handle called!");
     input.mouse_delta = input.mouse_delta + Vector2f(x, y) - input.mouse_position;
     input.mouse_position = Vector2f(x, y);
 }
 void handle_mouse_click(int button, int state, int x, int y) {
-    // LOG_DEBUG("Real mouse handle called!");
     handle_mouse_move(x, y);
 
     if (state == GLUT_DOWN) {
@@ -474,6 +472,9 @@ struct Transform {
 
     Matrix transform_matrix() const {
         return Matrix::translate(position) * Matrix::rotate(rotation) * Matrix::scale(scale);
+    }
+    Matrix normal_matrix() const {
+        return Matrix::rotate(rotation) * Matrix::scale({1.0f / scale.x, 1.0f / scale.y, 1.0f / scale.z});
     }
 };
 
@@ -558,10 +559,7 @@ struct PhongMaterial {
     float specular_factor;
 };
 struct Shader{
-    unsigned int id;
-    void use(){
-        glUseProgram(id);
-    }
+    unsigned int program_id;
 };
 
 struct ResouceItem {
@@ -649,7 +647,7 @@ public:
 
     void add_material(const std::string& key, const MaterialDesc& desc){
         Material mat;
-        mat.shaderprogram_id = shaders.get(shaders.find(desc.shader_name)).id;
+        mat.shaderprogram_id = shaders.get(shaders.find(desc.shader_name)).program_id;
         for(const auto& u : desc.uniforms){
             unsigned int buffer_id;
             glGenBuffers(1, &buffer_id);
@@ -683,11 +681,14 @@ public:
         unsigned int texture_id;
         glGenTextures(1, &texture_id);
         glBindTexture(GL_TEXTURE_2D, texture_id);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nWidth, nHeight,
-            0, GL_RGB, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(pImage));
+            0, GL_BGR, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(pImage));
+        glGenerateTextureMipmap(texture_id);
+
+        checkError();
 
         FreeImage_Unload(pImage);
 
@@ -739,16 +740,18 @@ struct GameObjectPart {
     uint32_t mesh_id;
     uint32_t material_id;
     uint32_t topology = GL_TRIANGLES;
-    Matrix model_matrix = Matrix::identity();
+    Matrix model_matrix;
+    Matrix normal_matrix;
 
     GameObjectPart(const std::string &mesh_name, const std::string &material_name,
-                   const uint32_t topology = GL_TRIANGLES, const Matrix model_matrix = Matrix::identity())
+                   const uint32_t topology = GL_TRIANGLES, const Transform& transform = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}})
         : mesh_id(resources.meshes.find(mesh_name)), material_id(resources.materials.find(material_name)),
-          topology(topology), model_matrix(model_matrix) {}
+          topology(topology), model_matrix(transform.transform_matrix()), normal_matrix(transform.normal_matrix()) {}
 
 private:
     friend class GObject;
     Matrix base_transform;
+    Matrix base_normal_matrix;
 };
 
 struct GObjectDesc {
@@ -772,6 +775,7 @@ public:
             relate_model_matrix = transform.transform_matrix();
             for (GameObjectPart &p : parts) {
                 p.base_transform = relate_model_matrix * p.model_matrix;
+                p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
             }
             is_relat_dirty = false;
         }
@@ -782,6 +786,7 @@ public:
     void add_part(const GameObjectPart &part) {
         GameObjectPart &p = parts.emplace_back(part);
         p.base_transform = relate_model_matrix * p.model_matrix;
+        p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
     }
 
     virtual ~GObject() = default;
@@ -907,7 +912,8 @@ struct PerFrameData{
 };
 
 struct PerObjectData{
-    Matrix object_matrix;
+    Matrix model_matrix;
+    Matrix normal_matrix;
 };
 struct RenderInfo {
     struct Viewport {
@@ -953,7 +959,6 @@ void setup_opengl() {
 
     if (!GLEW_ARB_compatibility) {
         std::cerr << "系统不支持旧的API" << std::endl;
-        exit(-1);
     }
     const char *vendorName = reinterpret_cast<const char *>(glGetString(GL_VENDOR));
     const char *version = reinterpret_cast<const char *>(glGetString(GL_VERSION));
@@ -974,7 +979,8 @@ void GObject::render() {
     {
         for (const GameObjectPart &p : parts) {
             auto data = render_info.per_object_uniform.map();
-            data->object_matrix = p.base_transform.transpose();
+            data->model_matrix = p.base_transform.transpose();
+            data->normal_matrix = p.base_normal_matrix.transpose();
             //data->object_matrix = Matrix::identity();
             render_info.per_object_uniform.unmap();
 
@@ -1010,10 +1016,10 @@ const std::vector<unsigned int> cube_indices = {1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2,
                                                 2, 6, 5, 5, 1, 2, 4, 5, 6, 6, 7, 4, 5, 4, 0, 0, 1, 5};
 
 const std::vector<Vertex> plane_vertices = {
-    {{-1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-    {{1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
-    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}},
-    {{-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, 1.0f}},
+    {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, -1.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {-1.0f, -1.0f}},
 };
 
 const std::vector<unsigned int> plane_indices = {3, 2, 0, 2, 1, 0};
@@ -1031,6 +1037,30 @@ void init_resource() {
     "assets/shaders/single_color/vs.vert", 
     "assets/shaders/single_color/ps.frag"
     );
+
+    resource.add_shader("flat", 
+    "assets/shaders/flat/vs.vert", 
+    "assets/shaders/flat/ps.frag"
+    );
+
+    resource.add_shader("phong", 
+    "assets/shaders/phong/vs.vert", 
+    "assets/shaders/phong/ps.frag"
+    );
+
+    resource.add_texture("wood_diffusion", "assets/materials/wood_flat/basecolor.jpg");
+
+    Vector3f color_while{1.0f, 1.0f, 1.0f};
+    resource.add_material("wood_flat", MaterialDesc{
+        "phong",
+        {
+            {2, sizeof(Vector3f), &color_while}
+        },
+        {
+            {3, "wood_diffusion"}
+        }
+    });
+
 
     resource.add_mesh("cube", Assets::cube_vertices, Assets::cube_indices);
     resource.add_mesh("platform", Assets::platform_vertices, Assets::cube_indices);
@@ -1096,9 +1126,9 @@ void init_start_scene() {
             GObjectDesc{
                 {
                     {0.0f, 5.0f, -10.0f}, 
-                    {0.0f, 0.0f, 0.0f}, 
+                    {0.0f, 0.0f, 1.57f}, 
                     {1.0f, 1.0f, 1.0f}}, 
-                    {{"plane", "default"}
+                    {{"plane", "wood_flat"}
                     }});
     }
     {

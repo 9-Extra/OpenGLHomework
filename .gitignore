@@ -1,4 +1,5 @@
-/bin/homework*
+/bin/
+!/bin/*.dll
 /.cache
 /build
 /.vscode
