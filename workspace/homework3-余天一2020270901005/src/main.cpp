@@ -597,8 +597,8 @@ public:
     ResourceContainer<Shader> shaders;
     ResourceContainer<Texture> textures;
 
-    void add_mesh(const std::string &key, const std::vector<Vertex> &vertices,
-                  const std::vector<unsigned int> &indices) {
+    void add_mesh(const std::string &key,const Vertex* vertices, size_t vertex_count,
+                  const unsigned int* const indices, size_t indices_count) {
 
         unsigned int vao_id, ibo_id, vbo_id;
         glGenVertexArrays(1, &vao_id);
@@ -608,7 +608,7 @@ public:
         glBindVertexArray(vao_id);
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
 
         const unsigned int float_per_vertex = 8;
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
@@ -619,10 +619,10 @@ public:
         glEnableVertexAttribArray(2);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(unsigned int), indices, GL_STATIC_DRAW);
 
         checkError();
-        meshes.add(key, Mesh{vao_id, (uint32_t)indices.size()});
+        meshes.add(key, Mesh{vao_id, (uint32_t)indices_count});
 
         glBindVertexArray(0);
 
@@ -641,6 +641,10 @@ public:
         };
 
         pool.emplace_back(std::make_unique<MeshResource>(vao_id, ibo_id, vbo_id));
+    }
+
+    void add_mesh(const std::string &key,const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices){
+        add_mesh(key, vertices.data(), vertices.size(), indices.data(), indices.size());
     }
 
     void add_material(const std::string &key, const MaterialDesc &desc) {
