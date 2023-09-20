@@ -890,20 +890,22 @@ public:
     ResourceContainer<Shader> shaders;
     ResourceContainer<Texture> textures;
 
-    void add_mesh(const std::string &key,const Vertex* vertices, size_t vertex_count,
-                  const unsigned int* const indices, size_t indices_count) {
+    void add_mesh(const std::string &key,const Vertex* vertices, size_t vertex_count, const uint16_t *const indices,
+                  size_t indices_count) {
         std::cout << "Load mesh: " << key << std::endl;
         unsigned int vao_id, ibo_id, vbo_id;
         glGenVertexArrays(1, &vao_id);
         glGenBuffers(1, &ibo_id);
         glGenBuffers(1, &vbo_id);
-
+        
         glBindVertexArray(vao_id);
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
         glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
 
-        const unsigned int float_per_vertex = 8;
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(uint16_t), indices, GL_STATIC_DRAW);
+
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vector3f));
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
@@ -911,13 +913,14 @@ public:
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(unsigned int), indices, GL_STATIC_DRAW);
-
         checkError();
-        meshes.add(key, Mesh{vao_id, (uint32_t)indices_count});
 
         glBindVertexArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+        meshes.add(key, Mesh{vao_id, (uint32_t)indices_count});
 
         deconstructors.emplace_back([vao_id, vbo_id, ibo_id](){
             glDeleteVertexArrays(1, &vao_id);
@@ -927,7 +930,7 @@ public:
         });
     }
 
-    void add_mesh(const std::string &key,const std::vector<Vertex>& vertices, const std::vector<unsigned int>& indices){
+    void add_mesh(const std::string &key,const std::vector<Vertex>& vertices, const std::vector<uint16_t>& indices){
         add_mesh(key, vertices.data(), vertices.size(), indices.data(), indices.size());
     }
 
@@ -940,6 +943,7 @@ public:
             glGenBuffers(1, &buffer_id);
             glBindBuffer(GL_UNIFORM_BUFFER, buffer_id);
             glBufferData(GL_UNIFORM_BUFFER, u.size, u.data, GL_STATIC_DRAW);
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
             mat.uniforms.emplace_back(Material::UniformData{u.binding_id, buffer_id});
 
@@ -974,6 +978,8 @@ public:
         checkError();
 
         FreeImage_Unload(pImage);
+
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         textures.add(key, Texture{texture_id});
 
@@ -1034,12 +1040,9 @@ public:
                 const Json &uv_buffer = get_buffer((size_t)primitive["attributes"]["TEXCOORD_0"].get_number());
 
                 uint32_t indices_count = json["accessors"][primitive["indices"].get_uint()]["count"].get_uint();
-                std::vector<unsigned int> indices(indices_count);
-                uint16_t *ptr = (uint16_t *)((char*)buffers[indices_buffer["buffer"].get_uint()].ptr + indices_buffer["byteOffset"].get_uint());
-                for (uint32_t i = 0; i < indices_count; i++) {
-                    indices[i] = ptr[i];
-                }
-
+                uint16_t* indices_ptr = (uint16_t *)((char *)buffers[indices_buffer["buffer"].get_uint()].ptr +
+                                                    indices_buffer["byteOffset"].get_uint());
+               
                 uint32_t vertex_count = position_buffer["byteLength"].get_uint() / sizeof(Vector3f);
                 uint32_t normal_count = normal_buffer["byteLength"].get_uint() / sizeof(Vector3f);
                 uint32_t uv_count = uv_buffer["byteLength"].get_uint() / sizeof(Vector2f);
@@ -1055,7 +1058,7 @@ public:
                     vertices[i] = {pos[i], normal[i], uv[i]};
                 }
 
-                add_mesh(key, vertices, indices);
+                add_mesh(key, vertices.data(), vertices.size(), indices_ptr, indices_count);
             } 
         }
         //加载纹理
@@ -1386,22 +1389,18 @@ void GObject::render() {
             auto data = render_info.per_object_uniform.map();
             data->model_matrix = p.base_transform.transpose();
             data->normal_matrix = p.base_normal_matrix.transpose();
-            // data->object_matrix = Matrix::identity();
             render_info.per_object_uniform.unmap();
-
-            // glBindBuffer(GL_UNIFORM_BUFFER, render_info.per_object_uniform.get_id());
-            // glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(Matrix), p.base_transform.transpose().data());
 
             const Material &material = resources.materials.get(p.material_id);
             material.bind();
 
             const Mesh &mesh = resources.meshes.get(p.mesh_id);
 
-            for (uint32_t i = 0; i < mesh.indices_count; i++) {
-                glBindVertexArray(mesh.VAO_id);
-                glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_INT, 0);
-                checkError();
-            }
+          
+            glBindVertexArray(mesh.VAO_id);
+            glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
+            checkError();
+            
         }
     }
 }
@@ -1412,7 +1411,7 @@ const std::vector<Vertex> cube_vertices = {{{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}}
                                            {{-1.0, -1.0, 1.0}, {0.0, 0.0, 1.0}},  {{1.0, -1.0, 1.0}, {1.0, 0.0, 1.0}},
                                            {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}},    {{-1.0, 1.0, 1.0}, {0.0, 1.0, 1.0}}};
 
-const std::vector<unsigned int> cube_indices = {1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2, 3, 7, 3, 0, 0, 4, 7,
+const std::vector<uint16_t> cube_indices = {1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2, 3, 7, 3, 0, 0, 4, 7,
                                                 2, 6, 5, 5, 1, 2, 4, 5, 6, 6, 7, 4, 5, 4, 0, 0, 1, 5};
 
 const std::vector<Vertex> plane_vertices = {
@@ -1422,12 +1421,12 @@ const std::vector<Vertex> plane_vertices = {
     {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
 };
 
-const std::vector<unsigned int> plane_indices = {3, 2, 0, 2, 1, 0};
+const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
 
 const std::vector<Vertex> line_vertices = {{{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
                                            {{1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}};
 
-const std::vector<unsigned int> line_indices = {0, 1};
+const std::vector<uint16_t> line_indices = {0, 1};
 } // namespace Assets
 
 void init_resource() {
@@ -1471,7 +1470,7 @@ void init_resource() {
         circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
     }
 
-    std::vector<unsigned int> circle_indices(300); // 100个三角形
+    std::vector<uint16_t> circle_indices(300); // 100个三角形
     for (uint32_t i = 0; i <= 99; i++) {           // 前99个
         // 逆时针
         circle_indices[i * 3] = 0;
@@ -1511,7 +1510,7 @@ void init_start_scene() {
     }
     {
         world.create_object(
-            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "wood_flat"}}});
+            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "default"}}});
     }
     {
         world.create_object(
@@ -1690,7 +1689,7 @@ int main(int argc, char **argv) {
     std::cout << "Hello\n";
 
     glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowPosition(50, 100);
     glutInitWindowSize(400, 300);
     glutCreateWindow(MY_TITLE);
