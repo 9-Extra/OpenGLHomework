@@ -1,15 +1,16 @@
+#include <GL/glew.h>
+#include <GL/glut.h>
 #include <assert.h>
 #include <chrono>
 #include <cmath>
 #include <fstream>
-#include <GL/glew.h>
-#include <GL/glut.h>
+#include <functional>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
-#include <functional>
+
 
 #define NOGDICAPMASKS
 #define NOSYSMETRICS
@@ -136,8 +137,8 @@ struct Vector3f {
 
     inline Vector3f operator+=(const Vector3f b) { return *this = *this + b; }
 
-    inline Vector3f operator*(const float n) { return {x * n, y * n, z * n}; }
-    inline Vector3f operator/(const float n) { return *this * (1.0f / n); }
+    inline Vector3f operator*(const float n) const { return {x * n, y * n, z * n}; }
+    inline Vector3f operator/(const float n) const { return *this * (1.0f / n); }
 
     inline float dot(const Vector3f b) const { return x * b.x + y * b.y + z * b.z; }
 
@@ -328,7 +329,7 @@ inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, f
 inline void checkError() {
     GLenum error;
     while ((error = glGetError()) != GL_NO_ERROR) {
-        std::cerr << "GL error 0x" << error << ": "  << gluErrorString(error) << std::endl;
+        std::cerr << "GL error 0x" << error << ": " << gluErrorString(error) << std::endl;
     }
 }
 
@@ -486,7 +487,9 @@ struct Vertex {
 
 struct PointLight {
     Vector3f position;
-    Vector3f flux;
+    Vector3f color;
+    float factor;
+    bool enabled = false;
 };
 
 struct DirectionalLight {
@@ -499,19 +502,19 @@ struct Mesh {
     const uint32_t indices_count;
 };
 
-struct TextureDesc{
+struct TextureDesc {
     std::string path;
 };
 
-struct Texture{
+struct Texture {
     const unsigned int texture_id;
 };
 
-struct MaterialDesc{
+struct MaterialDesc {
     struct UniformDataDesc {
         uint32_t binding_id;
         uint32_t size;
-        void* data;
+        void *data;
     };
 
     struct SampleData {
@@ -524,9 +527,9 @@ struct MaterialDesc{
     std::vector<SampleData> samplers;
 };
 
-//绑定标准可用的uniform
+// 绑定标准可用的uniform
 void bind_standard_uniform();
-struct Material{
+struct Material {
     struct UniformData {
         uint32_t binding_id;
         uint32_t buffer_id;
@@ -540,15 +543,15 @@ struct Material{
     std::vector<UniformData> uniforms;
     std::vector<SampleData> samplers;
 
-    void bind() const{
+    void bind() const {
         glUseProgram(shaderprogram_id);
 
         bind_standard_uniform();
 
-        for(const UniformData& u : uniforms){
+        for (const UniformData &u : uniforms) {
             glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
         }
-        for(const SampleData& s: samplers){
+        for (const SampleData &s : samplers) {
             glActiveTexture(GL_TEXTURE0 + s.binding_id);
             glBindTexture(GL_TEXTURE_2D, s.texture_id);
         }
@@ -558,7 +561,7 @@ struct PhongMaterial {
     Vector3f diffusion;
     float specular_factor;
 };
-struct Shader{
+struct Shader {
     unsigned int program_id;
 };
 
@@ -567,27 +570,23 @@ struct ResouceItem {
 };
 class RenderReousce final {
 public:
-    template<class T>
-    class ResourceContainer{
+    template <class T> class ResourceContainer {
     public:
-        uint32_t find(const std::string& key) const{
-            return look_up.at(key);
-        }
+        uint32_t find(const std::string &key) const { return look_up.at(key); }
 
-        void add(const std::string& key, T&& item){
+        void add(const std::string &key, T &&item) {
             uint32_t id = container.size();
             container.emplace_back(std::move(item));
             look_up[key] = id;
         }
 
-        const T& get(uint32_t id) const{
-            return container[id];
-        }
+        const T &get(uint32_t id) const { return container[id]; }
 
-        void clear(){
+        void clear() {
             look_up.clear();
             container.clear();
         }
+
     private:
         std::unordered_map<std::string, uint32_t> look_up;
         std::vector<T> container;
@@ -614,8 +613,7 @@ public:
         const unsigned int float_per_vertex = 8;
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vector3f));
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                              (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
@@ -645,10 +643,10 @@ public:
         pool.emplace_back(std::make_unique<MeshResource>(vao_id, ibo_id, vbo_id));
     }
 
-    void add_material(const std::string& key, const MaterialDesc& desc){
+    void add_material(const std::string &key, const MaterialDesc &desc) {
         Material mat;
         mat.shaderprogram_id = shaders.get(shaders.find(desc.shader_name)).program_id;
-        for(const auto& u : desc.uniforms){
+        for (const auto &u : desc.uniforms) {
             unsigned int buffer_id;
             glGenBuffers(1, &buffer_id);
             glBindBuffer(GL_UNIFORM_BUFFER, buffer_id);
@@ -656,25 +654,20 @@ public:
 
             mat.uniforms.emplace_back(Material::UniformData{u.binding_id, buffer_id});
 
-            deconstructors.emplace_back([buffer_id](){
-                glDeleteBuffers(1, &buffer_id);
-            });
+            deconstructors.emplace_back([buffer_id]() { glDeleteBuffers(1, &buffer_id); });
         }
-        for(const auto& s : desc.samplers){
+        for (const auto &s : desc.samplers) {
             mat.samplers.emplace_back(
-                Material::SampleData{s.binding_id, textures.get(textures.find(s.texture_key)).texture_id}
-            );
+                Material::SampleData{s.binding_id, textures.get(textures.find(s.texture_key)).texture_id});
         }
 
         materials.add(key, std::move(mat));
     }
 
-    void add_texture(const std::string& key, const std::string &vs_path){
-        FIBITMAP* pImage = FreeImage_Load(
-        FreeImage_GetFileType(vs_path.c_str(), 0),
-        vs_path.c_str());
+    void add_texture(const std::string &key, const std::string &vs_path) {
+        FIBITMAP *pImage = FreeImage_Load(FreeImage_GetFileType(vs_path.c_str(), 0), vs_path.c_str());
         pImage = FreeImage_ConvertTo24Bits(pImage);
-        
+
         unsigned int nWidth = FreeImage_GetWidth(pImage);
         unsigned int nHeight = FreeImage_GetHeight(pImage);
 
@@ -684,8 +677,8 @@ public:
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nWidth, nHeight,
-            0, GL_BGR, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(pImage));
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nWidth, nHeight, 0, GL_BGR, GL_UNSIGNED_BYTE,
+                     (void *)FreeImage_GetBits(pImage));
         glGenerateTextureMipmap(texture_id);
 
         checkError();
@@ -694,44 +687,39 @@ public:
 
         textures.add(key, Texture{texture_id});
 
-        deconstructors.emplace_back([texture_id](){
-            glDeleteTextures(1, &texture_id);
-        });
+        deconstructors.emplace_back([texture_id]() { glDeleteTextures(1, &texture_id); });
     }
 
-    void add_shader(const std::string& key, const std::string &vs_path, const std::string &ps_path){
+    void add_shader(const std::string &key, const std::string &vs_path, const std::string &ps_path) {
         unsigned int program_id = complie_shader_program(vs_path, ps_path);
 
         shaders.add(key, Shader{program_id});
 
-        struct ShaderProgramResource: ResouceItem{
+        struct ShaderProgramResource : ResouceItem {
             unsigned int id;
 
-            ShaderProgramResource(unsigned int id): id(id) {}
+            ShaderProgramResource(unsigned int id) : id(id) {}
 
-            virtual ~ShaderProgramResource(){
-                glDeleteProgram(id);
-            }
+            virtual ~ShaderProgramResource() { glDeleteProgram(id); }
         };
 
         pool.emplace_back(std::make_unique<ShaderProgramResource>(program_id));
-
     }
     // 保存在退出时释放
     template <class T> void add_raw_resource(T &&item) { pool.emplace_back(std::make_unique<T>(std::move(item))); }
 
-    void clear(){
+    void clear() {
         meshes.clear();
         materials.clear();
         shaders.clear();
         pool.clear();
-        for(auto& de : deconstructors){
+        for (auto &de : deconstructors) {
             de();
         }
         deconstructors.clear();
     }
-private:
 
+private:
     std::vector<std::unique_ptr<ResouceItem>> pool; // 保存在这里以析构释放资源
     std::vector<std::function<void()>> deconstructors;
 } resources;
@@ -744,7 +732,8 @@ struct GameObjectPart {
     Matrix normal_matrix;
 
     GameObjectPart(const std::string &mesh_name, const std::string &material_name,
-                   const uint32_t topology = GL_TRIANGLES, const Transform& transform = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}})
+                   const uint32_t topology = GL_TRIANGLES,
+                   const Transform &transform = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}})
         : mesh_id(resources.meshes.find(mesh_name)), material_id(resources.materials.find(material_name)),
           topology(topology), model_matrix(transform.transform_matrix()), normal_matrix(transform.normal_matrix()) {}
 
@@ -812,6 +801,17 @@ public:
         return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
     }
 
+    Vector3f get_up_direction() const {
+        float sp = sinf(rotation[1]);
+        float cp = cosf(rotation[1]);
+        float cr = cosf(rotation[0]);
+        float sr = sinf(rotation[0]);
+        float sy = sinf(rotation[2]);
+        float cy = cosf(rotation[2]);
+
+        return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
+    }
+
     Matrix get_view_perspective_matrix() const {
         return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
                Matrix::translate(-position);
@@ -833,10 +833,16 @@ private:
     const std::string name;
 };
 
+#define POINTLIGNT_MAX 8
+
 class World {
 public:
     Camera camera;
     Clock clock;
+
+    Vector3f ambient_light = {0.2f, 0.2f, 0.2f};
+    PointLight pointlights[POINTLIGNT_MAX];
+    bool is_light_dirty = true;
 
     template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
         std::shared_ptr<T> g_object = std::make_shared<T>(std::forward<ARGS>(args)...);
@@ -868,50 +874,68 @@ public:
 
     void render();
     // 获取屏幕上的一点对应的射线方向
-    Vector3f get_screen_point_oritation(Vector2f screen_xy) const;
+    Vector3f get_screen_point_oritation(Vector2f screen_xy) const {
+        float w_w = 400;
+        float w_h = 300;
+        Vector3f camera_up = camera.get_up_direction();
+        Vector3f camera_forward = camera.get_orientation();
+        Vector3f camera_right = camera_forward.cross(camera_up);
+        float tan_fov = std::tan(camera.fov / 2);
+
+        Vector3f ori = camera.get_orientation() +
+                       camera_right * ((screen_xy.x / w_w - 0.5f) * tan_fov * w_w / w_h * 2.0f) +
+                       camera_up * ((0.5f - screen_xy.y / w_h) * tan_fov * 2.0f);
+
+        return ori.normalize();
+    }
 
 private:
     std::unordered_map<GObject *, std::shared_ptr<GObject>> objects;
     std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
 };
 
-template<class T>
-struct WritableUniformBuffer{
-    //在初始化opengl后才能初始化
-    void init(){
+template <class T> struct WritableUniformBuffer {
+    // 在初始化opengl后才能初始化
+    void init() {
         assert(id == 0);
         glGenBuffers(1, &id);
         glBindBuffer(GL_UNIFORM_BUFFER, id);
         glBufferData(GL_UNIFORM_BUFFER, sizeof(T), nullptr, GL_DYNAMIC_DRAW);
     }
 
-    T* map(){
-        void* ptr = glMapNamedBuffer(id, GL_WRITE_ONLY);
+    T *map() {
+        void *ptr = glMapNamedBuffer(id, GL_WRITE_ONLY);
         assert(ptr != nullptr);
-        return (T*)ptr;
+        return (T *)ptr;
     }
-    void unmap(){
+    void unmap() {
         bool ret = glUnmapNamedBuffer(id);
         assert(ret);
     }
 
-    unsigned int get_id() const{
-        return id;
-    }
+    unsigned int get_id() const { return id; }
 
-    void clear(){
+    void clear() {
         glDeleteBuffers(1, &id);
         id = 0;
     }
+
 private:
     unsigned int id = 0;
 };
 
-struct PerFrameData{
+struct PointLightData final {
+    alignas(16) Vector3f position;  // 0
+    alignas(16) Vector3f intensity; // 4
+};
+struct PerFrameData final {
     Matrix view_perspective_matrix;
+    alignas(16) Vector3f ambient_light;  // 3 * 4 + 4
+    alignas(4) uint32_t pointlight_num; // 4
+    PointLightData pointlight_list[POINTLIGNT_MAX];
 };
 
-struct PerObjectData{
+struct PerObjectData {
     Matrix model_matrix;
     Matrix normal_matrix;
 };
@@ -926,12 +950,12 @@ struct RenderInfo {
     WritableUniformBuffer<PerFrameData> per_frame_uniform;
     WritableUniformBuffer<PerObjectData> per_object_uniform;
 
-    void init(){
+    void init() {
         per_frame_uniform.init();
         per_object_uniform.init();
     }
 
-    void clear(){
+    void clear() {
         per_frame_uniform.clear();
         per_object_uniform.clear();
     }
@@ -940,7 +964,7 @@ struct RenderInfo {
 World world;
 RenderInfo render_info;
 
-void bind_standard_uniform(){
+void bind_standard_uniform() {
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
 }
@@ -981,7 +1005,7 @@ void GObject::render() {
             auto data = render_info.per_object_uniform.map();
             data->model_matrix = p.base_transform.transpose();
             data->normal_matrix = p.base_normal_matrix.transpose();
-            //data->object_matrix = Matrix::identity();
+            // data->object_matrix = Matrix::identity();
             render_info.per_object_uniform.unmap();
 
             // glBindBuffer(GL_UNIFORM_BUFFER, render_info.per_object_uniform.get_id());
@@ -1033,34 +1057,17 @@ const std::vector<unsigned int> line_indices = {0, 1};
 void init_resource() {
     RenderReousce &resource = resources;
 
-    resource.add_shader("single_color", 
-    "assets/shaders/single_color/vs.vert", 
-    "assets/shaders/single_color/ps.frag"
-    );
+    resource.add_shader("single_color", "assets/shaders/single_color/vs.vert", "assets/shaders/single_color/ps.frag");
 
-    resource.add_shader("flat", 
-    "assets/shaders/flat/vs.vert", 
-    "assets/shaders/flat/ps.frag"
-    );
+    resource.add_shader("flat", "assets/shaders/flat/vs.vert", "assets/shaders/flat/ps.frag");
 
-    resource.add_shader("phong", 
-    "assets/shaders/phong/vs.vert", 
-    "assets/shaders/phong/ps.frag"
-    );
+    resource.add_shader("phong", "assets/shaders/phong/vs.vert", "assets/shaders/phong/ps.frag");
 
     resource.add_texture("wood_diffusion", "assets/materials/wood_flat/basecolor.jpg");
 
     Vector3f color_while{1.0f, 1.0f, 1.0f};
-    resource.add_material("wood_flat", MaterialDesc{
-        "phong",
-        {
-            {2, sizeof(Vector3f), &color_while}
-        },
-        {
-            {3, "wood_diffusion"}
-        }
-    });
-
+    resource.add_material("wood_flat",
+                          MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
 
     resource.add_mesh("cube", Assets::cube_vertices, Assets::cube_indices);
     resource.add_mesh("platform", Assets::platform_vertices, Assets::cube_indices);
@@ -1069,13 +1076,7 @@ void init_resource() {
     MaterialDesc green_material_desc;
     Vector3f color_green{0.0f, 1.0f, 0.0f};
     green_material_desc.shader_name = "single_color";
-    green_material_desc.uniforms.emplace_back(
-        MaterialDesc::UniformDataDesc{
-            2,
-            sizeof(Vector3f),
-            &color_green
-        }
-    );
+    green_material_desc.uniforms.emplace_back(MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), &color_green});
     resource.add_material("default", green_material_desc);
 
     resource.add_mesh("line", Assets::line_vertices, Assets::line_indices);
@@ -1118,18 +1119,20 @@ void init_start_scene() {
     }
 
     {
+        PointLight& light = world.pointlights[1];
+        light.enabled = true;
+        light.color = {1.0f, 1.0f, 1.0f};
+        light.factor = 100.0f;
+        light.position = {0.0f, 0.0f, 0.0f};
+    }
+
+    {
         world.create_object(
             GObjectDesc{{{0.0f, 0.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"cube", "default"}}});
     }
     {
         world.create_object(
-            GObjectDesc{
-                {
-                    {0.0f, 5.0f, -10.0f}, 
-                    {0.0f, 0.0f, 1.57f}, 
-                    {1.0f, 1.0f, 1.0f}}, 
-                    {{"plane", "wood_flat"}
-                    }});
+            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"plane", "wood_flat"}}});
     }
     {
         auto platform = world.create_object();
@@ -1166,13 +1169,31 @@ void World::tick() {
 }
 
 void World::render() {
-    //glDrawBuffer(GL_BACK); // 渲染到后缓冲区
+    // glDrawBuffer(GL_BACK); // 渲染到后缓冲区
     RenderInfo::Viewport &v = render_info.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
+
+    if (is_light_dirty) {
+        data->ambient_light = world.ambient_light;
+        uint32_t count = 0;
+        for (const PointLight &l : world.pointlights) {
+            if (l.enabled) {
+                PointLightData &d = data->pointlight_list[count];
+                d.position = l.position;
+                d.intensity = l.color * l.factor;
+                count++;
+            }
+        }
+        data->pointlight_num = count;
+        is_light_dirty = false;
+
+        std::cout << "Update light: count:" << count << std::endl;
+    }
+
     render_info.per_frame_uniform.unmap();
 
     for (auto &[ptr, obj] : objects) {
@@ -1210,6 +1231,17 @@ public:
         // }
         // if (is_middle_button_down && !input.is_middle_button_down()) {
         //     runtime->display.release_mouse();
+        // }
+
+        // if (input.is_right_button_down()) {
+        //     Vector3f point =
+        //         world.camera.position + world.get_screen_point_oritation(input.get_mouse_position()) * 10.0f;
+        //     PointLight& light = world.pointlights[0];
+        //     light.enabled = true;
+        //     light.position = point;
+        //     light.color = {1.0f, 1.0f, 1.0f};
+        //     light.factor = 1.0f;
+        //     world.is_light_dirty = true;
         // }
 
         if (input.is_middle_button_down()) {
@@ -1299,7 +1331,7 @@ int main(int argc, char **argv) {
 
     glutMainLoop();
 
-    //可惜这些代码都不能执行
+    // 可惜这些代码都不能执行
     resources.clear();
     render_info.clear();
     std::cout << "Normal Exit!\n";
