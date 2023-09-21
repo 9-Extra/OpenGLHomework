@@ -1077,15 +1077,30 @@ public:
             for (const Json &material : json["materials"].get_list()) {
                 const std::string &key = base_key + '.' + material["name"].get_string();
 
-                const std::string normal_texture = get_texture_key(material["normalTexture"]["index"].get_uint());
+                std::string normal_texture = "default_normal";
+                if (material.has("normalTexture")) {
+                    normal_texture = get_texture_key(material["normalTexture"]["index"].get_uint());
+                }
                 const std::string basecolor_texture =
                     get_texture_key(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
-                const std::string metallic_roughness_texture =
-                    get_texture_key(material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
-                float metallicFactor = (float)material["pbrMetallicRoughness"]["metallicFactor"].get_number();
+                std::string metallic_roughness_texture = "white";
+                if (material["pbrMetallicRoughness"].has("metallicRoughnessTexture")) {
+                    metallic_roughness_texture = get_texture_key(
+                        material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
+                }
+                 
+                float metallicFactor = 1.0f;
+                if (material["pbrMetallicRoughness"].has("metallicFactor")) {
+                    metallicFactor = (float)material["pbrMetallicRoughness"]["metallicFactor"].get_number();
+                }
+                float roughnessFactor = 1.0f;
+                if (material["pbrMetallicRoughness"].has("roughnessFactor")) {
+                    roughnessFactor = (float)material["pbrMetallicRoughness"]["roughnessFactor"].get_number();
+                }
+                float uniform_data[2] = {metallicFactor, roughnessFactor};
 
                 MaterialDesc desc = {"pbr",
-                                     {{2, sizeof(float), &metallicFactor}},
+                                     {{2, sizeof(float) * 2, &uniform_data}},
                                      {{0, basecolor_texture}, {1, normal_texture}, {2, metallic_roughness_texture}}};
 
                 add_material(key, desc);
@@ -1422,11 +1437,6 @@ const std::vector<Vertex> plane_vertices = {
 };
 
 const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
-
-const std::vector<Vertex> line_vertices = {{{0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}},
-                                           {{1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}};
-
-const std::vector<uint16_t> line_indices = {0, 1};
 } // namespace Assets
 
 void init_resource() {
@@ -1438,14 +1448,20 @@ void init_resource() {
 
     resource.add_shader("phong", "assets/shaders/phong/vs.vert", "assets/shaders/phong/ps.frag");
     resource.add_shader("pbr", "assets/shaders/pbr/vs.vert", "assets/shaders/pbr/ps.frag");
+    
+    resource.add_texture("default_normal", "assets/textures/black.jpg");
+    resource.add_texture("white", "assets/textures/white.jpg");
 
     resource.load_gltf("wood_floor", "assets/materials/wood_floor_deck/wood_floor_deck_1k.gltf");
-    resource.load_gltf("teapot", "assets/model/teapot.gltf");
+    resource.load_gltf("teapot", "assets/model/teapot/teapot.gltf");
+    //resource.load_gltf("ring", "assets/model/ring/ring.gltf");
 
     resource.add_texture("wood_diffusion", "assets/materials/wood_flat/basecolor.jpg");
 
     Vector3f color_while{1.0f, 1.0f, 1.0f};
     resource.add_material("wood_flat",
+                          MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
+    resource.add_material("wood_phong",
                           MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
 
     resource.add_mesh("cube", Assets::cube_vertices, Assets::cube_indices);
@@ -1457,7 +1473,6 @@ void init_resource() {
     green_material_desc.uniforms.emplace_back(MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), &color_green});
     resource.add_material("default", green_material_desc);
 
-    resource.add_mesh("line", Assets::line_vertices, Assets::line_indices);
     resource.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
 
     // 生产circle的顶点
@@ -1500,26 +1515,35 @@ void init_start_scene() {
         PointLight& light = world.pointlights[1];
         light.enabled = true;
         light.color = {1.0f, 1.0f, 1.0f};
-        light.factor = 100.0f;
+        light.factor = 150.0f;
         light.position = {0.0f, 0.0f, 0.0f};
     }
 
     {
+        PointLight &light = world.pointlights[2];
+        light.enabled = true;
+        light.color = {1.0f, 0.0f, 0.5f};
+        light.factor = 100.0f;
+        light.position = {0.0f, 5.0f, -20.0f};
+    }
+
+    {
         world.create_object(
-            GObjectDesc{{{0.0f, 0.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"cube", "default"}}});
+            GObjectDesc{{{0.0f, -5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {3.0f, 3.0f, 3.0f}}, {{"wood_floor.Sphere.001", "wood_floor.wood_floor_deck"}}});
     }
     {
         world.create_object(
-            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "default"}}});
+            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 1.57f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "wood_floor.wood_floor_deck"}}});
     }
     {
         world.create_object(
-            GObjectDesc{{{0.0f, 10.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"circle", "wood_flat"}}});
+            GObjectDesc{{{0.0f, 10.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"circle", "wood_floor.wood_floor_deck"}}});
     }
+    
     {
-        auto platform = world.create_object();
-        platform->add_part(GameObjectPart{"cube", "default"});
-        platform->transform = {{0.0f, -2.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {4.0, 0.1, 4.0}};
+        //auto platform = world.create_object();
+        //platform->add_part(GameObjectPart{"ring.Black", "default"});
+        //platform->transform = {{0.0f, -2.0f, -20.0f}, {0.0f, 0.0f, 0.0f}, {10.0f, 10.0f, 10.0f}};
     }
 }
 

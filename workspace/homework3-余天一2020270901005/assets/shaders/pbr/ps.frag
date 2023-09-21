@@ -5,6 +5,7 @@
 layout(binding = 2, std140) uniform per_material
 {
     float metallic_factor;
+    float roughness_factor;
 };
 
 struct PointLight{
@@ -135,7 +136,7 @@ void main()
     const vec3 basecolor = texture(basecolor_texture, vs_out.tex_coords).xyz;
     const vec3 metallic_roughness = texture(metallic_roughness_texture, vs_out.tex_coords).xyz;
     float metallic = metallic_roughness.x * metallic_factor;
-    float roughness = metallic_roughness.y;
+    float roughness = metallic_roughness.y * roughness_factor;
 
     vec3 result_color = ambient_light * basecolor;
     for(uint i = 0;i < pointlight_num;i++){
