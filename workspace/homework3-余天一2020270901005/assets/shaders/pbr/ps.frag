@@ -18,6 +18,8 @@ layout(binding = 0, std140) uniform per_frame
     mat4 view_perspective_matrix; //16 * 4
     vec3 ambient_light; //3 * 4 + 4
     vec3 camera_position;
+    float fog_min_distance;
+    float fog_density;
     uint pointlight_num; // 4
     PointLight pointlight_list[POINTLIGNT_MAX];
 };
@@ -153,6 +155,11 @@ void main()
     }
 
     result_color = min(result_color, 1.0f);
+
+    const vec3 fog_color = vec3(1.0f ,1.0f ,1.0f);
+    float distance = max(0.0f, length(vs_out.world_position - camera_position) - fog_min_distance);
+    float fog_factor = exp(-distance * fog_density);
+    result_color = mix(fog_color, result_color, fog_factor);
     // if (pointlight_num == 0){
     //     result_color = vec3(1.0f, 0.0f, 0.0f);
     // } else if (pointlight_num == 1){

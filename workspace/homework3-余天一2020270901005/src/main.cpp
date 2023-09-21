@@ -1242,6 +1242,9 @@ public:
     PointLight pointlights[POINTLIGNT_MAX];
     bool is_light_dirty = true;
 
+    float fog_min_distance = 10.0f;
+    float fog_density = 0.01f;
+
     template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
         std::shared_ptr<T> g_object = std::make_shared<T>(std::forward<ARGS>(args)...);
         assert(dynamic_cast<GObject *>(g_object.get()));
@@ -1330,6 +1333,8 @@ struct PerFrameData final {
     Matrix view_perspective_matrix;
     alignas(16) Vector3f ambient_light;  // 3 * 4 + 4
     alignas(16) Vector3f camera_position;
+    alignas(4) float fog_min_distance;
+    alignas(4) float fog_density;
     alignas(4) uint32_t pointlight_num; // 4
     PointLightData pointlight_list[POINTLIGNT_MAX];
 };
@@ -1454,6 +1459,8 @@ void init_resource() {
 
     resource.load_gltf("wood_floor", "assets/materials/wood_floor_deck/wood_floor_deck_1k.gltf");
     resource.load_gltf("teapot", "assets/model/teapot/teapot.gltf");
+    resource.load_gltf("gold", "assets/materials/gold/gold.gltf");
+    resource.load_gltf("stone", "assets/materials/stone/stone.gltf");
     //resource.load_gltf("ring", "assets/model/ring/ring.gltf");
 
     resource.add_texture("wood_diffusion", "assets/materials/wood_flat/basecolor.jpg");
@@ -1515,16 +1522,16 @@ void init_start_scene() {
         PointLight& light = world.pointlights[1];
         light.enabled = true;
         light.color = {1.0f, 1.0f, 1.0f};
-        light.factor = 150.0f;
+        light.factor = 300.0f;
         light.position = {0.0f, 0.0f, 0.0f};
     }
 
     {
         PointLight &light = world.pointlights[2];
         light.enabled = true;
-        light.color = {1.0f, 0.0f, 0.5f};
-        light.factor = 100.0f;
-        light.position = {0.0f, 5.0f, -20.0f};
+        light.color = {0.0f, 0.4f, 1.0f};
+        light.factor = 1000.0f;
+        light.position = {0.0f, 5.0f, -30.0f};
     }
 
     {
@@ -1536,8 +1543,13 @@ void init_start_scene() {
             GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 1.57f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "wood_floor.wood_floor_deck"}}});
     }
     {
-        world.create_object(
-            GObjectDesc{{{0.0f, 10.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"circle", "wood_floor.wood_floor_deck"}}});
+        world.create_object(GObjectDesc{{{0.0f, -10.0f, 0.0f}, {0.0f, -1.57f, 0.0f}, {40.0f, 40.0f, 1.0f}},
+                                        {{"plane", "stone.stone"}}});
+    }
+
+    {
+        world.create_object(GObjectDesc{{{10.0f, -5.0f, -5.0f}, {0.0f, 0.0f, 0.0f}, {2.0f, 2.0f, 2.0f}},
+                                        {{R"(gold.\u7acb\u65b9\u4f53)", "gold.gold"}}});
     }
     
     {
@@ -1580,9 +1592,13 @@ void World::render() {
     glViewport(v.x, v.y, v.width, v.height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    assert(fog_density >= 0.0f);
+
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
     data->camera_position = camera.position;
+    data->fog_density = fog_density;
+    data->fog_min_distance = fog_min_distance;
 
     if (is_light_dirty) {
         data->ambient_light = world.ambient_light;
@@ -1700,6 +1716,15 @@ public:
         if (IS_KEYDOWN('0')) {
             world.camera.position = {0.0, 0.0, 0.0};
             world.camera.rotation = {0.0, 0.0, 0.0};
+        }
+
+        if (IS_KEYDOWN(VK_UP)) {
+            world.fog_density += 0.00001f * delta;
+        }
+
+        if (IS_KEYDOWN(VK_DOWN)) {
+            world.fog_density -= 0.00001f * delta;
+            world.fog_density = std::max(world.fog_density, 0.0f);
         }
     }
 
