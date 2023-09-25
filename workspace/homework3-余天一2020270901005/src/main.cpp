@@ -733,8 +733,8 @@ unsigned int complie_shader_program(const std::string &vs_path, const std::strin
     std::ifstream ps_read(ps_path);
     std::string ps_src((std::istreambuf_iterator<char>(ps_read)), std::istreambuf_iterator<char>());
 
-    unsigned int vs = complie_shader(vs_src.data(), GL_VERTEX_SHADER);
-    unsigned int ps = complie_shader(ps_src.data(), GL_FRAGMENT_SHADER);
+    unsigned int vs = complie_shader(vs_src.c_str(), GL_VERTEX_SHADER);
+    unsigned int ps = complie_shader(ps_src.c_str(), GL_FRAGMENT_SHADER);
 
     unsigned int shaderProgram;
     shaderProgram = glCreateProgram();
@@ -850,10 +850,7 @@ struct Material {
         }
     }
 };
-struct PhongMaterial {
-    Vector3f diffusion;
-    float specular_factor;
-};
+
 struct Shader {
     unsigned int program_id;
 };
@@ -1005,7 +1002,7 @@ public:
         Json json = SimpleJson::parse_file(path);
 
         struct Buffer {
-            void *ptr = nullptr;
+            char *ptr = nullptr;
             size_t len;
             Buffer(size_t len) : ptr(new char[len]), len(len) {}
             ~Buffer() {
@@ -1238,12 +1235,12 @@ public:
     Camera camera;
     Clock clock;
 
-    Vector3f ambient_light = {0.2f, 0.2f, 0.2f};
+    Vector3f ambient_light = {0.02f, 0.02f, 0.02f};
     PointLight pointlights[POINTLIGNT_MAX];
     bool is_light_dirty = true;
 
-    float fog_min_distance = 10.0f;
-    float fog_density = 0.01f;
+    float fog_min_distance = 20.0f;
+    float fog_density = 0.001f;
 
     template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
         std::shared_ptr<T> g_object = std::make_shared<T>(std::forward<ARGS>(args)...);
@@ -1344,6 +1341,8 @@ struct PerObjectData {
     Matrix normal_matrix;
 };
 struct RenderInfo {
+    uint32_t tick_count = 0;
+
     struct Viewport {
         GLint x;
         GLint y;
@@ -1426,14 +1425,6 @@ void GObject::render() {
 }
 
 namespace Assets {
-const std::vector<Vertex> cube_vertices = {{{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}}, {{1.0, -1.0, -1.0}, {1.0, 0.0, 0.0}},
-                                           {{1.0, 1.0, -1.0}, {1.0, 1.0, 0.0}},   {{-1.0, 1.0, -1.0}, {0.0, 1.0, 0.0}},
-                                           {{-1.0, -1.0, 1.0}, {0.0, 0.0, 1.0}},  {{1.0, -1.0, 1.0}, {1.0, 0.0, 1.0}},
-                                           {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}},    {{-1.0, 1.0, 1.0}, {0.0, 1.0, 1.0}}};
-
-const std::vector<uint16_t> cube_indices = {1, 0, 3, 3, 2, 1, 3, 7, 6, 6, 2, 3, 7, 3, 0, 0, 4, 7,
-                                                2, 6, 5, 5, 1, 2, 4, 5, 6, 6, 7, 4, 5, 4, 0, 0, 1, 5};
-
 const std::vector<Vertex> plane_vertices = {
     {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
@@ -1471,7 +1462,6 @@ void init_resource() {
     resource.add_material("wood_phong",
                           MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
 
-    resource.add_mesh("cube", Assets::cube_vertices, Assets::cube_indices);
     resource.add_mesh("default", {}, {});
 
     MaterialDesc green_material_desc;
@@ -1522,7 +1512,7 @@ void init_start_scene() {
         PointLight& light = world.pointlights[1];
         light.enabled = true;
         light.color = {1.0f, 1.0f, 1.0f};
-        light.factor = 300.0f;
+        light.factor = 40.0f;
         light.position = {0.0f, 0.0f, 0.0f};
     }
 
@@ -1530,7 +1520,7 @@ void init_start_scene() {
         PointLight &light = world.pointlights[2];
         light.enabled = true;
         light.color = {0.0f, 0.4f, 1.0f};
-        light.factor = 1000.0f;
+        light.factor = 80.0f;
         light.position = {0.0f, 5.0f, -30.0f};
     }
 
@@ -1573,6 +1563,7 @@ inline unsigned int calculate_fps(float delta_time) {
 }
 
 void World::tick() {
+    render_info.tick_count++;
     clock.update();
 
     for (const auto &[name, sys] : systems) {
@@ -1614,7 +1605,7 @@ void World::render() {
         data->pointlight_num = count;
         is_light_dirty = false;
 
-        std::cout << "Update light: count:" << count << std::endl;
+        //std::cout << "Update light: count:" << count << std::endl;
     }
 
     render_info.per_frame_uniform.unmap();
@@ -1648,6 +1639,20 @@ public:
         // 使用鼠标中键旋转视角
         //  左上角为(0,0)，右下角为(w,h)
         static bool is_middle_button_down = false;
+        static bool is_left_button_down = false;
+        static bool is_right_button_down = false;
+
+        if (!is_left_button_down && input.is_left_button_down()) {
+            world.pointlights[1].enabled = false;
+            world.pointlights[2].enabled = false;
+            world.is_light_dirty = true;
+        }
+
+        if (!is_right_button_down && input.is_right_button_down()) {
+            world.pointlights[1].enabled = true;
+            world.pointlights[2].enabled = true;
+            world.is_light_dirty = true;
+        }
 
         // if (!is_middle_button_down && input.is_middle_button_down()) {
         //     runtime->display.grab_mouse();
@@ -1676,6 +1681,8 @@ public:
             desc.rotation.y -= dy * rotate_speed;
         }
 
+        is_left_button_down = input.is_left_button_down();
+        is_right_button_down = input.is_right_button_down();
         is_middle_button_down = input.is_middle_button_down();
     }
 
@@ -1731,6 +1738,9 @@ public:
     void tick() override {
         handle_keyboard(world.clock.get_delta());
         handle_mouse();
+
+        world.pointlights[1].position.x = 20.0f * sinf(render_info.tick_count * 0.01f);
+        world.is_light_dirty = true;
     }
 };
 

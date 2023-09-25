@@ -166,5 +166,5 @@ void main()
     //     result_color = vec3(0.0f, 1.0f, 0.0f);
     // }
 
-    out_color = vec4(result_color, 1.0f);
+    out_color = vec4(pow(result_color, vec3(1 / 2.2)), 1.0f);
 }
