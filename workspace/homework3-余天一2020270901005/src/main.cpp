@@ -775,7 +775,7 @@ struct Transform {
 struct Vertex {
     Vector3f position;
     Vector3f normal;
-    Vector2f uv = {0.0f, 0.0f};
+    Vector2f uv;
 };
 
 struct PointLight {
@@ -800,6 +800,10 @@ struct TextureDesc {
 };
 
 struct Texture {
+    const unsigned int texture_id;
+};
+
+struct CubeMap {
     const unsigned int texture_id;
 };
 
@@ -886,6 +890,7 @@ public:
     ResourceContainer<Material> materials;
     ResourceContainer<Shader> shaders;
     ResourceContainer<Texture> textures;
+    ResourceContainer<CubeMap> cubemaps;
 
     void add_mesh(const std::string &key,const Vertex* vertices, size_t vertex_count, const uint16_t *const indices,
                   size_t indices_count) {
@@ -954,10 +959,12 @@ public:
         materials.add(key, std::move(mat));
     }
 
-    void add_texture(const std::string &key, const std::string &vs_path) {
+    void add_texture(const std::string &key, const std::string &image_path) {
         std::cout << "Load texture: " << key << std::endl;
-        FIBITMAP *pImage = FreeImage_Load(FreeImage_GetFileType(vs_path.c_str(), 0), vs_path.c_str());
-        pImage = FreeImage_ConvertTo24Bits(pImage);
+        FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
+        FIBITMAP* pImage = FreeImage_ConvertTo24Bits(pImage_ori);
+        FreeImage_FlipVertical(pImage);
+        FreeImage_Unload(pImage_ori);
 
         unsigned int nWidth = FreeImage_GetWidth(pImage);
         unsigned int nHeight = FreeImage_GetHeight(pImage);
@@ -981,6 +988,70 @@ public:
         textures.add(key, Texture{texture_id});
 
         deconstructors.emplace_back([texture_id]() { glDeleteTextures(1, &texture_id); });
+    }
+
+    void add_cubemap(const std::string &key, const std::string &cubemap_dir_path) {
+        std::cout << "Load skybox: " << key << std::endl;
+
+        const std::string base_dir =
+            cubemap_dir_path.empty() || cubemap_dir_path.back() == '/' || cubemap_dir_path.back() == '\\'
+                ? cubemap_dir_path
+                : cubemap_dir_path + '/';
+
+        //GL_TEXTURE_CUBE_MAP_POSITIVE_X 
+        //GL_TEXTURE_CUBE_MAP_NEGATIVE_X
+        //GL_TEXTURE_CUBE_MAP_POSITIVE_Y
+        //GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
+        //GL_TEXTURE_CUBE_MAP_POSITIVE_Z
+        //GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
+        std::vector<std::string> textures_faces = {
+            base_dir + "px.png",    base_dir + "nx.png",  base_dir + "py.png",
+            base_dir + "ny.png", base_dir + "pz.png", base_dir + "nz.png",
+        };
+
+        unsigned int texture_id;
+        glGenTextures(1, &texture_id);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_id);
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+        /*
+            因为立方体贴图包含有6个纹理，每个面一个，我们需要调用glTexImage2D函数6次，参数和之前教程中很类似。但这一次我们将纹理目标(target)
+            参数设置为立方体贴图的一个特定的面，告诉OpenGL我们在对立方体贴图的哪一个面创建纹理。这就意味着我们需要对立方体贴图的每一个面都调用
+            一次glTexImage2D。
+        */
+        for (unsigned int i = 0; i < textures_faces.size(); i++) {
+            FIBITMAP *pImage_ori =
+                FreeImage_Load(FreeImage_GetFileType(textures_faces[i].c_str(), 0), textures_faces[i].c_str());
+            if(pImage_ori == nullptr){
+                std::cerr << "加载图像: " << textures_faces[i] << "失败\n";
+                exit(-1);
+            }
+            FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
+            FreeImage_FlipVertical(pImage);
+            FreeImage_Unload(pImage_ori);
+
+            unsigned int nWidth = FreeImage_GetWidth(pImage);
+            //std::cout << nWidth << std::endl;
+            unsigned int nHeight = FreeImage_GetHeight(pImage);
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, nWidth, nHeight, 0, GL_BGR, GL_UNSIGNED_BYTE,
+                     (void *)FreeImage_GetBits(pImage));
+
+            FreeImage_Unload(pImage);
+        }
+        glGenerateTextureMipmap(texture_id);
+        
+    
+        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+
+        cubemaps.add(key, CubeMap{texture_id});
+
+        deconstructors.emplace_back([texture_id]{
+            glDeleteTextures(1, &texture_id);
+        });
     }
 
     void add_shader(const std::string &key, const std::string &vs_path, const std::string &ps_path) {
@@ -1211,6 +1282,10 @@ public:
         return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
                Matrix::translate(-position);
     }
+
+    Matrix get_skybox_view_perspective_matrix() const {
+        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() * Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
+    }
 };
 
 class ISystem {
@@ -1241,6 +1316,8 @@ public:
 
     float fog_min_distance = 20.0f;
     float fog_density = 0.001f;
+
+    unsigned int skybox_color_texture_id = 0;
 
     template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
         std::shared_ptr<T> g_object = std::make_shared<T>(std::forward<ARGS>(args)...);
@@ -1393,7 +1470,6 @@ void setup_opengl() {
 
     glClearColor(0.0, 0.0, 0.0, 0.0);
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW); // 逆时针的面为正面
     glDepthFunc(GL_LESS);
@@ -1425,6 +1501,18 @@ void GObject::render() {
 }
 
 namespace Assets {
+
+const std::vector<Vertex> cube_vertices = {
+    {{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}, {0.0, 0.0}}, {{1.0, -1.0, -1.0}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
+    {{1.0, 1.0, -1.0}, {1.0, 1.0, 0.0}, {0.0, 0.0}},   {{-1.0, 1.0, -1.0}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
+    {{-1.0, -1.0, 1.0}, {0.0, 0.0, 1.0}, {0.0, 0.0}},  {{1.0, -1.0, 1.0}, {1.0, 0.0, 1.0}, {0.0, 0.0}},
+    {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}, {0.0, 0.0}},    {{-1.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0}}};
+
+const std::vector<uint16_t> cube_indices = {
+    3, 0, 1, 1, 2, 3, 6, 7, 3, 3, 2, 6, 0, 3, 7, 7, 4, 0,
+    5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
+
+
 const std::vector<Vertex> plane_vertices = {
     {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
     {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
@@ -1444,6 +1532,7 @@ void init_resource() {
 
     resource.add_shader("phong", "assets/shaders/phong/vs.vert", "assets/shaders/phong/ps.frag");
     resource.add_shader("pbr", "assets/shaders/pbr/vs.vert", "assets/shaders/pbr/ps.frag");
+    resource.add_shader("skybox", "assets/shaders/skybox/vs.vert", "assets/shaders/skybox/ps.frag");
     
     resource.add_texture("default_normal", "assets/textures/black.jpg");
     resource.add_texture("white", "assets/textures/white.jpg");
@@ -1462,6 +1551,8 @@ void init_resource() {
     resource.add_material("wood_phong",
                           MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
 
+    resource.add_cubemap("skybox_valley_color", "assets/skybox/valley");
+
     resource.add_mesh("default", {}, {});
 
     MaterialDesc green_material_desc;
@@ -1471,6 +1562,7 @@ void init_resource() {
     resource.add_material("default", green_material_desc);
 
     resource.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
+    resource.add_mesh("skybox_cube", Assets::cube_vertices, Assets::cube_indices);
 
     // 生产circle的顶点
     std::vector<Vertex> circle_vertices(101);
@@ -1506,6 +1598,10 @@ void init_start_scene() {
         desc.near_z = 1.0f;
         desc.far_z = 1000.0f;
         desc.aspect = float(render_info.main_viewport.width) / float(render_info.main_viewport.height);
+    }
+
+    {
+        world.skybox_color_texture_id = resources.cubemaps.get(resources.cubemaps.find("skybox_valley_color")).texture_id;
     }
 
     {
@@ -1577,7 +1673,10 @@ void World::tick() {
     }
 }
 
+#define SKYBOX_COLOR_BINDING 5
+
 void World::render() {
+    glEnable(GL_CULL_FACE);//启用面剔除
     // glDrawBuffer(GL_BACK); // 渲染到后缓冲区
     RenderInfo::Viewport &v = render_info.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
@@ -1613,6 +1712,24 @@ void World::render() {
     for (auto &[ptr, obj] : objects) {
         obj->render();
     }
+
+    //渲染天空盒
+    glEnable(GL_CULL_FACE);//启用面剔除
+
+    data = render_info.per_frame_uniform.map();
+    data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
+    render_info.per_frame_uniform.unmap();
+
+    unsigned int skybox_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
+    glUseProgram(skybox_program_id);
+    checkError();
+    glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_color_texture_id);
+    const Mesh &mesh = resources.meshes.get(resources.meshes.find("skybox_cube"));
+          
+    glBindVertexArray(mesh.VAO_id);
+    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
+    checkError();
 
     glutSwapBuffers();
     checkError();
