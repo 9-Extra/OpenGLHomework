@@ -1,5 +1,6 @@
 #include <GL/glew.h>
 #include <GL/glut.h>
+#include <array>
 #include <assert.h>
 #include <chrono>
 #include <cmath>
@@ -9,10 +10,8 @@
 #include <memory>
 #include <sstream>
 #include <unordered_map>
-#include <vector>
 #include <variant>
-#include <array>
-
+#include <vector>
 
 #define NOGDICAPMASKS
 #define NOSYSMETRICS
@@ -53,7 +52,7 @@
 #include <FreeImage.h>
 
 namespace SimpleJson {
-//极简json解析库，并没有完全实现json的所有解析功能，任何格式错误都可能导致死循环或者崩溃
+// 极简json解析库，并没有完全实现json的所有解析功能，任何格式错误都可能导致死循环或者崩溃
 struct json_null {};
 
 enum JsonType { Null = 0, Bool = 1, Number = 2, String = 3, List = 4, Map = 5 };
@@ -61,79 +60,61 @@ enum JsonType { Null = 0, Bool = 1, Number = 2, String = 3, List = 4, Map = 5 };
 class JsonObject {
 public:
     std::unique_ptr<std::variant<json_null, bool, double, std::string, std::vector<JsonObject>,
-                 std::unordered_map<std::string, JsonObject>>>
+                                 std::unordered_map<std::string, JsonObject>>>
         inner;
 
     JsonObject() : inner(std::make_unique<decltype(inner)::element_type>()) {}
     JsonType get_type() const { return (JsonType)inner->index(); }
 
-    const JsonObject& operator[](size_t i) const{
-        return std::get<List>(*inner)[i];
-    }
+    const JsonObject &operator[](size_t i) const { return std::get<List>(*inner)[i]; }
 
-    const JsonObject& operator[](const std::string& key) const{
-        return std::get<JsonType::Map>(*inner).at(key);
-    }
+    const JsonObject &operator[](const std::string &key) const { return std::get<JsonType::Map>(*inner).at(key); }
 
-    bool has(const std::string& key) const {
+    bool has(const std::string &key) const {
         const std::unordered_map<std::string, JsonObject> &m = std::get<JsonType::Map>(*inner);
         return m.find(key) != m.end();
     }
 
-    bool is_null() const{
-        return inner->index() == Null;
-    }
+    bool is_null() const { return inner->index() == Null; }
 
-    const std::vector<JsonObject>& get_list() const{
-        return std::get<List>(*inner);
-    }
+    const std::vector<JsonObject> &get_list() const { return std::get<List>(*inner); }
 
-    const std::unordered_map<std::string, JsonObject>& get_map() const{
-        return std::get<JsonType::Map>(*inner);
-    }
+    const std::unordered_map<std::string, JsonObject> &get_map() const { return std::get<JsonType::Map>(*inner); }
 
-    const std::string& get_string() const{
-        return std::get<JsonType::String>(*inner);
-    }
+    const std::string &get_string() const { return std::get<JsonType::String>(*inner); }
 
-    double get_number() const{
-        return std::get<JsonType::Number>(*inner);
-    }
+    double get_number() const { return std::get<JsonType::Number>(*inner); }
 
-    uint64_t get_uint() const { 
-        return (uint64_t)get_number(); 
-    }
+    uint64_t get_uint() const { return (uint64_t)get_number(); }
 
     int64_t get_int() const { return (int64_t)get_number(); }
 
-    bool get_bool() const{
-        return std::get<JsonType::Bool>(*inner);
-    }
+    bool get_bool() const { return std::get<JsonType::Bool>(*inner); }
 
     friend std::ostream &operator<<(std::ostream &os, const JsonObject &json) {
         switch (json.get_type()) {
 
-        case Null:{
+        case Null: {
             os << "null";
             break;
         }
-        case Bool:{
+        case Bool: {
             os << (json.get_bool() ? "true" : "false");
             break;
         }
-        case Number:{
+        case Number: {
             os << json.get_number();
             break;
         }
-        case String:{
+        case String: {
             os << '\"' << json.get_string() << '\"';
             break;
         }
-        case List:{
+        case List: {
             os << "[";
             bool is_first = true;
-            for(const auto& i : json.get_list()){
-                if (!is_first){
+            for (const auto &i : json.get_list()) {
+                if (!is_first) {
                     os << ", ";
                 } else {
                     is_first = false;
@@ -146,8 +127,8 @@ public:
         case Map:
             os << "{";
             bool is_first = true;
-            for(const auto& [key, i] : json.get_map()){
-                if (!is_first){
+            for (const auto &[key, i] : json.get_map()) {
+                if (!is_first) {
                     os << ", ";
                 } else {
                     is_first = false;
@@ -187,7 +168,7 @@ inline bool is_number(char c) { return c <= '9' && c >= '0'; }
 inline double parse_number(const char **const start) {
     assert(is_number(**start) || **start == '.' || **start == '-');
     double sign = 1.0;
-    if (**start == '-'){
+    if (**start == '-') {
         sign = -1.0;
         (*start)++;
     }
@@ -295,8 +276,7 @@ inline JsonObject parse_object(const char **const start) {
     case '8':
     case '9':
     case '.':
-    case '-':
-    {
+    case '-': {
         *object.inner = parse_number(start);
         break;
     }
@@ -314,9 +294,9 @@ inline JsonObject parse_object(const char **const start) {
 inline JsonObject parse(const std::string &json_str) {
     JsonObject obj;
 
-    const char* start = json_str.c_str();
+    const char *start = json_str.c_str();
     Impl::skip_empty(&start);
-    if (*start == '\0'){
+    if (*start == '\0') {
         *obj.inner = json_null();
     } else {
         obj = Impl::parse_object(&start);
@@ -329,14 +309,14 @@ inline JsonObject parse(const std::string &json_str) {
     return obj;
 }
 
-inline JsonObject parse_stream(std::istream& stream) {
+inline JsonObject parse_stream(std::istream &stream) {
     std::string str((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
     return parse(str);
 }
 
 inline JsonObject parse_file(const std::string &path) {
     std::ifstream file(path);
-    if (!file.is_open()){
+    if (!file.is_open()) {
         std::cerr << "Con't open file: " << path << std::endl;
         exit(-1);
     }
@@ -729,14 +709,14 @@ unsigned int complie_shader(const char *const src, unsigned int shader_type) {
 
 unsigned int complie_shader_program(const std::string &vs_path, const std::string &ps_path) {
     std::ifstream vs_read(vs_path);
-    if (!vs_read.is_open()){
+    if (!vs_read.is_open()) {
         std::cerr << "Can't open file: " << vs_path;
         exit(-1);
     }
     std::string vs_src((std::istreambuf_iterator<char>(vs_read)), std::istreambuf_iterator<char>());
 
     std::ifstream ps_read(ps_path);
-    if (!ps_read.is_open()){
+    if (!ps_read.is_open()) {
         std::cerr << "Can't open file: " << ps_path;
         exit(-1);
     }
@@ -901,14 +881,14 @@ public:
     ResourceContainer<Texture> textures;
     ResourceContainer<CubeMap> cubemaps;
 
-    void add_mesh(const std::string &key,const Vertex* vertices, size_t vertex_count, const uint16_t *const indices,
+    void add_mesh(const std::string &key, const Vertex *vertices, size_t vertex_count, const uint16_t *const indices,
                   size_t indices_count) {
         std::cout << "Load mesh: " << key << std::endl;
         unsigned int vao_id, ibo_id, vbo_id;
         glGenVertexArrays(1, &vao_id);
         glGenBuffers(1, &ibo_id);
         glGenBuffers(1, &vbo_id);
-        
+
         glBindVertexArray(vao_id);
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
@@ -933,7 +913,7 @@ public:
 
         meshes.add(key, Mesh{vao_id, (uint32_t)indices_count});
 
-        deconstructors.emplace_back([vao_id, vbo_id, ibo_id](){
+        deconstructors.emplace_back([vao_id, vbo_id, ibo_id]() {
             glDeleteVertexArrays(1, &vao_id);
             glDeleteBuffers(1, &vbo_id);
             glDeleteBuffers(1, &ibo_id);
@@ -941,7 +921,7 @@ public:
         });
     }
 
-    void add_mesh(const std::string &key,const std::vector<Vertex>& vertices, const std::vector<uint16_t>& indices){
+    void add_mesh(const std::string &key, const std::vector<Vertex> &vertices, const std::vector<uint16_t> &indices) {
         add_mesh(key, vertices.data(), vertices.size(), indices.data(), indices.size());
     }
 
@@ -971,11 +951,11 @@ public:
     void add_texture(const std::string &key, const std::string &image_path) {
         std::cout << "Load texture: " << key << std::endl;
         FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
-        if (pImage_ori == nullptr){
+        if (pImage_ori == nullptr) {
             std::cerr << "Failed to load image: " << image_path << std::endl;
             exit(-1);
         }
-        FIBITMAP* pImage = FreeImage_ConvertTo24Bits(pImage_ori);
+        FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
         FreeImage_FlipVertical(pImage);
         FreeImage_Unload(pImage_ori);
 
@@ -1003,26 +983,19 @@ public:
         deconstructors.emplace_back([texture_id]() { glDeleteTextures(1, &texture_id); });
     }
 
-    void add_cubemap(
-        const std::string &key, 
-        const std::string &image_px,
-        const std::string &image_nx,
-        const std::string &image_py,
-        const std::string &image_ny,
-        const std::string &image_pz,
-        const std::string &image_nz) 
-    {
+    void add_cubemap(const std::string &key, const std::string &image_px, const std::string &image_nx,
+                     const std::string &image_py, const std::string &image_ny, const std::string &image_pz,
+                     const std::string &image_nz) {
         std::cout << "Load skybox: " << key << std::endl;
 
-        //GL_TEXTURE_CUBE_MAP_POSITIVE_X 
-        //GL_TEXTURE_CUBE_MAP_NEGATIVE_X
-        //GL_TEXTURE_CUBE_MAP_POSITIVE_Y
-        //GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
-        //GL_TEXTURE_CUBE_MAP_POSITIVE_Z
-        //GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
-        std::array<const std::string*, 6> textures_faces{
-            &image_px, &image_nx, &image_py,
-            &image_ny, &image_pz, &image_nz,
+        // GL_TEXTURE_CUBE_MAP_POSITIVE_X
+        // GL_TEXTURE_CUBE_MAP_NEGATIVE_X
+        // GL_TEXTURE_CUBE_MAP_POSITIVE_Y
+        // GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
+        // GL_TEXTURE_CUBE_MAP_POSITIVE_Z
+        // GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
+        std::array<const std::string *, 6> textures_faces{
+            &image_px, &image_nx, &image_py, &image_ny, &image_pz, &image_nz,
         };
 
         unsigned int texture_id;
@@ -1034,12 +1007,11 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    
+
         for (unsigned int i = 0; i < textures_faces.size(); i++) {
-            const char* path = textures_faces[i]->c_str();
-            FIBITMAP *pImage_ori =
-                FreeImage_Load(FreeImage_GetFileType(path, 0), path);
-            if(pImage_ori == nullptr){
+            const char *path = textures_faces[i]->c_str();
+            FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(path, 0), path);
+            if (pImage_ori == nullptr) {
                 std::cerr << "加载图像: " << textures_faces[i] << "失败\n";
                 exit(-1);
             }
@@ -1048,23 +1020,20 @@ public:
             FreeImage_Unload(pImage_ori);
 
             unsigned int nWidth = FreeImage_GetWidth(pImage);
-            //std::cout << nWidth << std::endl;
+            // std::cout << nWidth << std::endl;
             unsigned int nHeight = FreeImage_GetHeight(pImage);
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, nWidth, nHeight, 0, GL_BGR, GL_UNSIGNED_BYTE,
-                     (void *)FreeImage_GetBits(pImage));
+                         (void *)FreeImage_GetBits(pImage));
 
             FreeImage_Unload(pImage);
         }
         glGenerateTextureMipmap(texture_id);
-        
-    
+
         glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 
         cubemaps.add(key, CubeMap{texture_id});
 
-        deconstructors.emplace_back([texture_id]{
-            glDeleteTextures(1, &texture_id);
-        });
+        deconstructors.emplace_back([texture_id] { glDeleteTextures(1, &texture_id); });
     }
 
     void add_shader(const std::string &key, const std::string &vs_path, const std::string &ps_path) {
@@ -1073,9 +1042,7 @@ public:
 
         shaders.add(key, Shader{program_id});
 
-        deconstructors.emplace_back([program_id](){
-            glDeleteProgram(program_id);
-        });
+        deconstructors.emplace_back([program_id]() { glDeleteProgram(program_id); });
     }
 
     void load_gltf(const std::string &base_key, const std::string &path) {
@@ -1106,11 +1073,10 @@ public:
             }
         }
         auto get_buffer = [&](uint64_t accessor_id) -> const Json & {
-            const Json &buffer_view =
-                json["bufferViews"][json["accessors"][accessor_id]["bufferView"].get_uint()];
+            const Json &buffer_view = json["bufferViews"][json["accessors"][accessor_id]["bufferView"].get_uint()];
             return buffer_view;
         };
-        //加载网格
+        // 加载网格
         if (json.has("meshes")) {
             for (const Json &mesh : json["meshes"].get_list()) {
                 const std::string &key = base_key + '.' + mesh["name"].get_string();
@@ -1121,18 +1087,19 @@ public:
                 const Json &uv_buffer = get_buffer(primitive["attributes"]["TEXCOORD_0"].get_uint());
 
                 uint32_t indices_count = json["accessors"][primitive["indices"].get_uint()]["count"].get_uint();
-                uint16_t* indices_ptr = (uint16_t *)((char *)buffers[indices_buffer["buffer"].get_uint()].ptr +
-                                                    indices_buffer["byteOffset"].get_uint());
-               
+                uint16_t *indices_ptr = (uint16_t *)((char *)buffers[indices_buffer["buffer"].get_uint()].ptr +
+                                                     indices_buffer["byteOffset"].get_uint());
+
                 uint32_t vertex_count = position_buffer["byteLength"].get_uint() / sizeof(Vector3f);
                 uint32_t normal_count = normal_buffer["byteLength"].get_uint() / sizeof(Vector3f);
                 uint32_t uv_count = uv_buffer["byteLength"].get_uint() / sizeof(Vector2f);
                 assert(vertex_count == normal_count && vertex_count == uv_count);
-                Vector3f *pos = (Vector3f *)((char*)buffers[position_buffer["buffer"].get_uint()].ptr + position_buffer["byteOffset"].get_uint());
-                Vector3f *normal =
-                    (Vector3f *)((char*)buffers[normal_buffer["buffer"].get_uint()].ptr + normal_buffer["byteOffset"].get_uint());
-                Vector2f *uv =
-                    (Vector2f *)((char*)buffers[uv_buffer["buffer"].get_uint()].ptr + uv_buffer["byteOffset"].get_uint());
+                Vector3f *pos = (Vector3f *)((char *)buffers[position_buffer["buffer"].get_uint()].ptr +
+                                             position_buffer["byteOffset"].get_uint());
+                Vector3f *normal = (Vector3f *)((char *)buffers[normal_buffer["buffer"].get_uint()].ptr +
+                                                normal_buffer["byteOffset"].get_uint());
+                Vector2f *uv = (Vector2f *)((char *)buffers[uv_buffer["buffer"].get_uint()].ptr +
+                                            uv_buffer["byteOffset"].get_uint());
 
                 std::vector<Vertex> vertices(vertex_count);
                 for (uint32_t i = 0; i < vertex_count; i++) {
@@ -1140,9 +1107,9 @@ public:
                 }
 
                 add_mesh(key, vertices.data(), vertices.size(), indices_ptr, indices_count);
-            } 
+            }
         }
-        //加载纹理
+        // 加载纹理
         if (json.has("images")) {
             for (const Json &texture : json["images"].get_list()) {
                 const std::string &key = base_key + '.' + texture["name"].get_string();
@@ -1150,7 +1117,7 @@ public:
             }
         }
 
-        //加载材质
+        // 加载材质
         auto get_texture_key = [&](size_t index) -> std::string {
             return base_key + '.' + json["images"][json["textures"][index]["source"].get_uint()]["name"].get_string();
         };
@@ -1169,7 +1136,7 @@ public:
                     metallic_roughness_texture = get_texture_key(
                         material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
                 }
-                 
+
                 float metallicFactor = 1.0f;
                 if (material["pbrMetallicRoughness"].has("metallicFactor")) {
                     metallicFactor = (float)material["pbrMetallicRoughness"]["metallicFactor"].get_number();
@@ -1199,28 +1166,31 @@ public:
             base_dir = ""; // 可能在同一目录下
         }
 
-        for (const auto& [key, shader_desc] : json["shader"].get_map()) {
-            add_shader(key, base_dir + shader_desc["vs_path"].get_string(),
-                       base_dir + shader_desc["ps_path"].get_string());
+        if (json.has("shader")) {
+            for (const auto &[key, shader_desc] : json["shader"].get_map()) {
+                add_shader(key, base_dir + shader_desc["vs_path"].get_string(),
+                           base_dir + shader_desc["ps_path"].get_string());
+            }
         }
 
-        for (const auto& [key, texture_desc] : json["texture"].get_map()) {
-            add_texture(key, base_dir + texture_desc["image"].get_string());
+        if (json.has("texture")) {
+            for (const auto &[key, texture_desc] : json["texture"].get_map()) {
+                add_texture(key, base_dir + texture_desc["image"].get_string());
+            }
         }
 
-        for (const auto& [key, cubemap_desc] : json["cubemap"].get_map()) {
-            add_cubemap(key, 
-            base_dir + cubemap_desc["px"].get_string(),
-            base_dir + cubemap_desc["nx"].get_string(),
-            base_dir + cubemap_desc["py"].get_string(),
-            base_dir + cubemap_desc["ny"].get_string(),
-            base_dir + cubemap_desc["pz"].get_string(),
-            base_dir + cubemap_desc["nz"].get_string()
-            );
+        if (json.has("cubemap")) {
+            for (const auto &[key, cubemap_desc] : json["cubemap"].get_map()) {
+                add_cubemap(key, base_dir + cubemap_desc["px"].get_string(), base_dir + cubemap_desc["nx"].get_string(),
+                            base_dir + cubemap_desc["py"].get_string(), base_dir + cubemap_desc["ny"].get_string(),
+                            base_dir + cubemap_desc["pz"].get_string(), base_dir + cubemap_desc["nz"].get_string());
+            }
         }
 
-        for (const auto& [key, gltf_desc] : json["gltf"].get_map()) {
-            load_gltf(key, base_dir + gltf_desc["path"].get_string());
+        if (json.has("gltf")) {
+            for (const auto &[key, gltf_desc] : json["gltf"].get_map()) {
+                load_gltf(key, base_dir + gltf_desc["path"].get_string());
+            }
         }
     }
 
@@ -1301,7 +1271,13 @@ private:
 
 struct Camera {
 public:
-    Camera() {}
+    Camera() {
+        position = {0.0f, 0.0f, 0.0f};
+        rotation = {0.0f, 0.0f, 0.0f};
+        fov = 1.57f;
+        near_z = 1.0f;
+        far_z = 1000.0f;
+    }
 
     Vector3f position;
     Vector3f rotation; // zxy
@@ -1332,11 +1308,12 @@ public:
     }
 
     Matrix get_skybox_view_perspective_matrix() const {
-        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() * Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
+        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
+               Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
     }
 };
 
-struct SkyBox{
+struct SkyBox {
     unsigned int color_texture_id;
     unsigned int shader_program_id;
     uint32_t mesh_id;
@@ -1393,7 +1370,7 @@ public:
         systems.emplace(system->get_name(), system);
     }
 
-    void set_skybox(const std::string& color_cubemap_key){
+    void set_skybox(const std::string &color_cubemap_key) {
         skybox.color_texture_id = resources.cubemaps.get(resources.cubemaps.find(color_cubemap_key)).texture_id;
         skybox.shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
         skybox.mesh_id = resources.meshes.find("skybox_cube");
@@ -1465,7 +1442,7 @@ struct PointLightData final {
 };
 struct PerFrameData final {
     Matrix view_perspective_matrix;
-    alignas(16) Vector3f ambient_light;  // 3 * 4 + 4
+    alignas(16) Vector3f ambient_light; // 3 * 4 + 4
     alignas(16) Vector3f camera_position;
     alignas(4) float fog_min_distance;
     alignas(4) float fog_density;
@@ -1551,11 +1528,9 @@ void GObject::render() {
 
             const Mesh &mesh = resources.meshes.get(p.mesh_id);
 
-          
             glBindVertexArray(mesh.VAO_id);
             glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
             checkError();
-            
         }
     }
 }
@@ -1568,10 +1543,8 @@ const std::vector<Vertex> cube_vertices = {
     {{-1.0, -1.0, 1.0}, {0.0, 0.0, 1.0}, {0.0, 0.0}},  {{1.0, -1.0, 1.0}, {1.0, 0.0, 1.0}, {0.0, 0.0}},
     {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}, {0.0, 0.0}},    {{-1.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0}}};
 
-const std::vector<uint16_t> cube_indices = {
-    3, 0, 1, 1, 2, 3, 6, 7, 3, 3, 2, 6, 0, 3, 7, 7, 4, 0,
-    5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
-
+const std::vector<uint16_t> cube_indices = {3, 0, 1, 1, 2, 3, 6, 7, 3, 3, 2, 6, 0, 3, 7, 7, 4, 0,
+                                            5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
 
 const std::vector<Vertex> plane_vertices = {
     {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
@@ -1583,7 +1556,7 @@ const std::vector<Vertex> plane_vertices = {
 const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
 } // namespace Assets
 
-std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t edge_count){
+std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t edge_count) {
     assert((size_t)edge_count * 3 <= std::numeric_limits<uint16_t>::max());
     // 生产circle的顶点
     std::vector<Vertex> circle_vertices(edge_count + 1);
@@ -1596,7 +1569,7 @@ std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t 
     }
 
     std::vector<uint16_t> circle_indices(edge_count * 3); // edge_count个三角形
-    for (uint16_t i = 0; i <= edge_count - 1; i++) {           // 前edge_count - 1个
+    for (uint16_t i = 0; i <= edge_count - 1; i++) {      // 前edge_count - 1个
         // 逆时针
         circle_indices[i * 3] = 0;
         circle_indices[i * 3 + 1] = i + 2;
@@ -1625,7 +1598,8 @@ void init_resource() {
         MaterialDesc green_material_desc;
         Vector3f color_green{0.0f, 1.0f, 0.0f};
         green_material_desc.shader_name = "single_color";
-        green_material_desc.uniforms.emplace_back(MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), color_green.data()});
+        green_material_desc.uniforms.emplace_back(
+            MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), color_green.data()});
         resource.add_material("default", green_material_desc);
     }
 
@@ -1639,27 +1613,27 @@ void init_resource() {
     }
 }
 
-Vector3f load_vec3(const SimpleJson::JsonObject& json){
+Vector3f load_vec3(const SimpleJson::JsonObject &json) {
     assert(json.get_type() == SimpleJson::JsonType::List);
-    const std::vector<SimpleJson::JsonObject>& numbers = json.get_list();
+    const std::vector<SimpleJson::JsonObject> &numbers = json.get_list();
     return {(float)numbers[0].get_number(), (float)numbers[1].get_number(), (float)numbers[2].get_number()};
 }
 
-Transform load_transform(const SimpleJson::JsonObject& json){
+Transform load_transform(const SimpleJson::JsonObject &json) {
     Transform trans{
         {0.0f, 0.0f, 0.0f},
         {0.0f, 0.0f, 0.0f},
         {1.0f, 1.0f, 1.0f},
     };
-    if (json.has("transform")){
-        const SimpleJson::JsonObject& t = json["transform"];
-        if (t.has("position")){
+    if (json.has("transform")) {
+        const SimpleJson::JsonObject &t = json["transform"];
+        if (t.has("position")) {
             trans.position = load_vec3(t["position"]);
         }
-        if (t.has("rotation")){
+        if (t.has("rotation")) {
             trans.rotation = load_vec3(t["rotation"]);
         }
-        if (t.has("scale")){
+        if (t.has("scale")) {
             trans.scale = load_vec3(t["scale"]);
         }
     }
@@ -1667,45 +1641,39 @@ Transform load_transform(const SimpleJson::JsonObject& json){
     return trans;
 }
 
-void load_scene_from_json(const std::string& path){
+void load_scene_from_json(const std::string &path) {
     SimpleJson::JsonObject json = SimpleJson::parse_file(path);
-    //加载物体
-    for(const SimpleJson::JsonObject& object_desc: json["objects"].get_list()){
-        GObjectDesc desc{
-            load_transform(object_desc),
-            {}
-        };
-        for(const SimpleJson::JsonObject& part_desc : object_desc["parts"].get_list()){
-            desc.parts.emplace_back(part_desc["mesh"].get_string(), part_desc["material"].get_string());
+    // 加载天空盒
+    if (!json.has("skybox")) {
+        std::cerr << "Skybox is required for a scene" << std::endl;
+        exit(-1);
+    }
+
+    world.set_skybox(json["skybox"]["specular_texture"].get_string());
+    // 加载物体
+    if (json.has("objects")) {
+        for (const SimpleJson::JsonObject &object_desc : json["objects"].get_list()) {
+            GObjectDesc desc{load_transform(object_desc), {}};
+            for (const SimpleJson::JsonObject &part_desc : object_desc["parts"].get_list()) {
+                desc.parts.emplace_back(part_desc["mesh"].get_string(), part_desc["material"].get_string());
+            }
+
+            world.create_object<GObject>(std::move(desc));
         }
-
-        world.create_object<GObject>(std::move(desc));
     }
-    //加载点光源
-    size_t light_index = 0;
-    for(const SimpleJson::JsonObject& pointlight_desc: json["pointlights"].get_list()){
-        PointLight& light = world.pointlights[light_index++];
-        light.enabled = true;
-        light.position = load_vec3(pointlight_desc["position"]);
-        light.color = load_vec3(pointlight_desc["color"]);
-        light.factor = (float)pointlight_desc["factor"].get_number();
+    // 加载点光源
+    if (json.has("pointlights")) {
+        size_t light_index = 0;
+        for (const SimpleJson::JsonObject &pointlight_desc : json["pointlights"].get_list()) {
+            PointLight &light = world.pointlights[light_index++];
+            light.enabled = true;
+            light.position = load_vec3(pointlight_desc["position"]);
+            light.color = load_vec3(pointlight_desc["color"]);
+            light.factor = (float)pointlight_desc["factor"].get_number();
+        }
     }
 }
-void init_start_scene() {
-    {
-        Camera &desc = world.camera;
-        desc.position = {0.0f, 0.0f, 0.0f};
-        desc.rotation = {0.0f, 0.0f, 0.0f};
-        desc.fov = 1.57f;
-        desc.near_z = 1.0f;
-        desc.far_z = 1000.0f;
-        desc.aspect = float(render_info.main_viewport.width) / float(render_info.main_viewport.height);
-    }
-
-    world.set_skybox("skybox_valley_color");    
-    load_scene_from_json("assets/scene1.json");
-
-}
+void init_start_scene() { load_scene_from_json("assets/scene1.json"); }
 
 inline unsigned int calculate_fps(float delta_time) {
     const float ratio = 0.1f;
@@ -1737,9 +1705,9 @@ void World::tick() {
 
 #define SKYBOX_COLOR_BINDING 5
 
-//渲染天空盒
-void World::render_skybox(){
-    glEnable(GL_CULL_FACE);//启用面剔除
+// 渲染天空盒
+void World::render_skybox() {
+    glEnable(GL_CULL_FACE); // 启用面剔除
 
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
@@ -1756,7 +1724,7 @@ void World::render_skybox(){
 }
 
 void World::render() {
-    glEnable(GL_CULL_FACE);//启用面剔除
+    glEnable(GL_CULL_FACE); // 启用面剔除
     // glDrawBuffer(GL_BACK); // 渲染到后缓冲区
     RenderInfo::Viewport &v = render_info.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
@@ -1784,7 +1752,7 @@ void World::render() {
         data->pointlight_num = count;
         is_light_dirty = false;
 
-        //std::cout << "Update light: count:" << count << std::endl;
+        // std::cout << "Update light: count:" << count << std::endl;
     }
 
     render_info.per_frame_uniform.unmap();

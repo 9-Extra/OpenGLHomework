@@ -1,4 +1,7 @@
 {
+    "skybox": {
+        "specular_texture": "skybox_valley_color"
+    },
     "objects": [
         {
             "transform": {
