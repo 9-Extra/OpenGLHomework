@@ -1034,11 +1034,7 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-        /*
-            因为立方体贴图包含有6个纹理，每个面一个，我们需要调用glTexImage2D函数6次，参数和之前教程中很类似。但这一次我们将纹理目标(target)
-            参数设置为立方体贴图的一个特定的面，告诉OpenGL我们在对立方体贴图的哪一个面创建纹理。这就意味着我们需要对立方体贴图的每一个面都调用
-            一次glTexImage2D。
-        */
+    
         for (unsigned int i = 0; i < textures_faces.size(); i++) {
             const char* path = textures_faces[i]->c_str();
             FIBITMAP *pImage_ori =
@@ -1109,9 +1105,9 @@ public:
                 read.close();
             }
         }
-        auto get_buffer = [&](size_t accessor_id) -> const Json & {
+        auto get_buffer = [&](uint64_t accessor_id) -> const Json & {
             const Json &buffer_view =
-                json["bufferViews"][(size_t)json["accessors"][accessor_id]["bufferView"].get_number()];
+                json["bufferViews"][json["accessors"][accessor_id]["bufferView"].get_uint()];
             return buffer_view;
         };
         //加载网格
@@ -1119,10 +1115,10 @@ public:
             for (const Json &mesh : json["meshes"].get_list()) {
                 const std::string &key = base_key + '.' + mesh["name"].get_string();
                 const Json &primitive = mesh["primitives"][0];
-                const Json &indices_buffer = get_buffer((size_t)primitive["indices"].get_number());
-                const Json &position_buffer = get_buffer((size_t)primitive["attributes"]["POSITION"].get_number());
-                const Json &normal_buffer = get_buffer((size_t)primitive["attributes"]["NORMAL"].get_number());
-                const Json &uv_buffer = get_buffer((size_t)primitive["attributes"]["TEXCOORD_0"].get_number());
+                const Json &indices_buffer = get_buffer(primitive["indices"].get_uint());
+                const Json &position_buffer = get_buffer(primitive["attributes"]["POSITION"].get_uint());
+                const Json &normal_buffer = get_buffer(primitive["attributes"]["NORMAL"].get_uint());
+                const Json &uv_buffer = get_buffer(primitive["attributes"]["TEXCOORD_0"].get_uint());
 
                 uint32_t indices_count = json["accessors"][primitive["indices"].get_uint()]["count"].get_uint();
                 uint16_t* indices_ptr = (uint16_t *)((char *)buffers[indices_buffer["buffer"].get_uint()].ptr +
@@ -1340,6 +1336,12 @@ public:
     }
 };
 
+struct SkyBox{
+    unsigned int color_texture_id;
+    unsigned int shader_program_id;
+    uint32_t mesh_id;
+};
+
 class ISystem {
 public:
     bool enable;
@@ -1369,8 +1371,6 @@ public:
     float fog_min_distance = 20.0f;
     float fog_density = 0.001f;
 
-    unsigned int skybox_color_texture_id = 0;
-
     template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
         std::shared_ptr<T> g_object = std::make_shared<T>(std::forward<ARGS>(args)...);
         assert(dynamic_cast<GObject *>(g_object.get()));
@@ -1393,12 +1393,19 @@ public:
         systems.emplace(system->get_name(), system);
     }
 
+    void set_skybox(const std::string& color_cubemap_key){
+        skybox.color_texture_id = resources.cubemaps.get(resources.cubemaps.find(color_cubemap_key)).texture_id;
+        skybox.shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
+        skybox.mesh_id = resources.meshes.find("skybox_cube");
+    }
+
     ISystem *get_system(const std::string &name) { return systems.at(name).get(); }
 
     void remove_system(const std::string &name) { systems.erase(name); }
 
     void tick();
 
+    void render_skybox();
     void render();
     // 获取屏幕上的一点对应的射线方向
     Vector3f get_screen_point_oritation(Vector2f screen_xy) const {
@@ -1419,6 +1426,7 @@ public:
 private:
     std::unordered_map<GObject *, std::shared_ptr<GObject>> objects;
     std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
+    SkyBox skybox;
 };
 
 template <class T> struct WritableUniformBuffer {
@@ -1694,10 +1702,7 @@ void init_start_scene() {
         desc.aspect = float(render_info.main_viewport.width) / float(render_info.main_viewport.height);
     }
 
-    {
-        world.skybox_color_texture_id = resources.cubemaps.get(resources.cubemaps.find("skybox_valley_color")).texture_id;
-    }
-
+    world.set_skybox("skybox_valley_color");    
     load_scene_from_json("assets/scene1.json");
 
 }
@@ -1731,6 +1736,24 @@ void World::tick() {
 }
 
 #define SKYBOX_COLOR_BINDING 5
+
+//渲染天空盒
+void World::render_skybox(){
+    glEnable(GL_CULL_FACE);//启用面剔除
+
+    auto data = render_info.per_frame_uniform.map();
+    data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
+    render_info.per_frame_uniform.unmap();
+
+    glUseProgram(skybox.shader_program_id);
+    glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.color_texture_id);
+    const Mesh &mesh = resources.meshes.get(skybox.mesh_id);
+
+    glBindVertexArray(mesh.VAO_id);
+    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
+    checkError();
+}
 
 void World::render() {
     glEnable(GL_CULL_FACE);//启用面剔除
@@ -1770,23 +1793,7 @@ void World::render() {
         obj->render();
     }
 
-    //渲染天空盒
-    glEnable(GL_CULL_FACE);//启用面剔除
-
-    data = render_info.per_frame_uniform.map();
-    data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
-    render_info.per_frame_uniform.unmap();
-
-    unsigned int skybox_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
-    glUseProgram(skybox_program_id);
-    checkError();
-    glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_color_texture_id);
-    const Mesh &mesh = resources.meshes.get(resources.meshes.find("skybox_cube"));
-          
-    glBindVertexArray(mesh.VAO_id);
-    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
-    checkError();
+    render_skybox();
 
     glutSwapBuffers();
     checkError();
