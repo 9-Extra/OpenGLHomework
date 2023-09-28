@@ -1,0 +1,61 @@
+{
+    "shader": {
+        "single_color": {
+            "vs_path": "shaders/single_color/vs.vert",
+            "ps_path": "shaders/single_color/ps.frag"
+        },
+        "flat": {
+            "vs_path": "shaders/flat/vs.vert",
+            "ps_path": "shaders/flat/ps.frag"
+        },
+        "phong":{
+            "vs_path": "shaders/phong/vs.vert",
+            "ps_path": "shaders/phong/ps.frag"
+        },
+        "pbr":{
+            "vs_path": "shaders/pbr/vs.vert",
+            "ps_path": "shaders/pbr/ps.frag"
+        },
+        "skybox":{
+            "vs_path": "shaders/skybox/vs.vert",
+            "ps_path": "shaders/skybox/ps.frag"
+        }
+    },
+    "texture": {
+        "default_normal": {
+            "image": "textures/black.jpg"
+        },
+        "white": {
+            "image": "textures/white.jpg"
+        },
+        "wood_diffusion": {
+            "image": "materials/wood_flat/basecolor.jpg"
+        }
+    },
+
+    "cubemap": {
+        "skybox_valley_color": {
+            "px": "skybox/valley/px.png",
+            "nx": "skybox/valley/nx.png",
+            "py": "skybox/valley/py.png",
+            "ny": "skybox/valley/ny.png",
+            "pz": "skybox/valley/pz.png",
+            "nz": "skybox/valley/nz.png"
+        }
+    },
+
+    "gltf": {
+        "wood_floor": {
+            "path": "materials/wood_floor_deck/wood_floor_deck_1k.gltf"
+        },
+        "teapot": {
+            "path": "model/teapot/teapot.gltf"
+        },
+        "gold": {
+            "path": "materials/gold/gold.gltf"
+        },
+        "stone": {
+            "path": "materials/stone/stone.gltf"
+        }
+    }
+}

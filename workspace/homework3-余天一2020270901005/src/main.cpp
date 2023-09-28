@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <vector>
 #include <variant>
+#include <array>
 
 
 #define NOGDICAPMASKS
@@ -335,7 +336,7 @@ inline JsonObject parse_stream(std::istream& stream) {
 
 inline JsonObject parse_file(const std::string &path) {
     std::ifstream file(path);
-    if (!file){
+    if (!file.is_open()){
         std::cerr << "Con't open file: " << path << std::endl;
         exit(-1);
     }
@@ -728,9 +729,17 @@ unsigned int complie_shader(const char *const src, unsigned int shader_type) {
 
 unsigned int complie_shader_program(const std::string &vs_path, const std::string &ps_path) {
     std::ifstream vs_read(vs_path);
+    if (!vs_read.is_open()){
+        std::cerr << "Can't open file: " << vs_path;
+        exit(-1);
+    }
     std::string vs_src((std::istreambuf_iterator<char>(vs_read)), std::istreambuf_iterator<char>());
 
     std::ifstream ps_read(ps_path);
+    if (!ps_read.is_open()){
+        std::cerr << "Can't open file: " << ps_path;
+        exit(-1);
+    }
     std::string ps_src((std::istreambuf_iterator<char>(ps_read)), std::istreambuf_iterator<char>());
 
     unsigned int vs = complie_shader(vs_src.c_str(), GL_VERTEX_SHADER);
@@ -962,6 +971,10 @@ public:
     void add_texture(const std::string &key, const std::string &image_path) {
         std::cout << "Load texture: " << key << std::endl;
         FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
+        if (pImage_ori == nullptr){
+            std::cerr << "Failed to load image: " << image_path << std::endl;
+            exit(-1);
+        }
         FIBITMAP* pImage = FreeImage_ConvertTo24Bits(pImage_ori);
         FreeImage_FlipVertical(pImage);
         FreeImage_Unload(pImage_ori);
@@ -990,13 +1003,16 @@ public:
         deconstructors.emplace_back([texture_id]() { glDeleteTextures(1, &texture_id); });
     }
 
-    void add_cubemap(const std::string &key, const std::string &cubemap_dir_path) {
+    void add_cubemap(
+        const std::string &key, 
+        const std::string &image_px,
+        const std::string &image_nx,
+        const std::string &image_py,
+        const std::string &image_ny,
+        const std::string &image_pz,
+        const std::string &image_nz) 
+    {
         std::cout << "Load skybox: " << key << std::endl;
-
-        const std::string base_dir =
-            cubemap_dir_path.empty() || cubemap_dir_path.back() == '/' || cubemap_dir_path.back() == '\\'
-                ? cubemap_dir_path
-                : cubemap_dir_path + '/';
 
         //GL_TEXTURE_CUBE_MAP_POSITIVE_X 
         //GL_TEXTURE_CUBE_MAP_NEGATIVE_X
@@ -1004,9 +1020,9 @@ public:
         //GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
         //GL_TEXTURE_CUBE_MAP_POSITIVE_Z
         //GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
-        std::vector<std::string> textures_faces = {
-            base_dir + "px.png",    base_dir + "nx.png",  base_dir + "py.png",
-            base_dir + "ny.png", base_dir + "pz.png", base_dir + "nz.png",
+        std::array<const std::string*, 6> textures_faces{
+            &image_px, &image_nx, &image_py,
+            &image_ny, &image_pz, &image_nz,
         };
 
         unsigned int texture_id;
@@ -1024,8 +1040,9 @@ public:
             一次glTexImage2D。
         */
         for (unsigned int i = 0; i < textures_faces.size(); i++) {
+            const char* path = textures_faces[i]->c_str();
             FIBITMAP *pImage_ori =
-                FreeImage_Load(FreeImage_GetFileType(textures_faces[i].c_str(), 0), textures_faces[i].c_str());
+                FreeImage_Load(FreeImage_GetFileType(path, 0), path);
             if(pImage_ori == nullptr){
                 std::cerr << "加载图像: " << textures_faces[i] << "失败\n";
                 exit(-1);
@@ -1173,6 +1190,41 @@ public:
 
                 add_material(key, desc);
             }
+        }
+    }
+
+    void load_json(const std::string &path) {
+        SimpleJson::JsonObject json = SimpleJson::parse_file(path);
+        std::cout << path << std::endl;
+        std::string base_dir;
+        if (size_t it = path.find_last_of("/\\"); it != std::string::npos) {
+            base_dir = path.substr(0, it + 1); // 包含'/'
+        } else {
+            base_dir = ""; // 可能在同一目录下
+        }
+
+        for (const auto& [key, shader_desc] : json["shader"].get_map()) {
+            add_shader(key, base_dir + shader_desc["vs_path"].get_string(),
+                       base_dir + shader_desc["ps_path"].get_string());
+        }
+
+        for (const auto& [key, texture_desc] : json["texture"].get_map()) {
+            add_texture(key, base_dir + texture_desc["image"].get_string());
+        }
+
+        for (const auto& [key, cubemap_desc] : json["cubemap"].get_map()) {
+            add_cubemap(key, 
+            base_dir + cubemap_desc["px"].get_string(),
+            base_dir + cubemap_desc["nx"].get_string(),
+            base_dir + cubemap_desc["py"].get_string(),
+            base_dir + cubemap_desc["ny"].get_string(),
+            base_dir + cubemap_desc["pz"].get_string(),
+            base_dir + cubemap_desc["nz"].get_string()
+            );
+        }
+
+        for (const auto& [key, gltf_desc] : json["gltf"].get_map()) {
+            load_gltf(key, base_dir + gltf_desc["path"].get_string());
         }
     }
 
@@ -1526,32 +1578,13 @@ const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
 void init_resource() {
     RenderReousce &resource = resources;
 
-    resource.add_shader("single_color", "assets/shaders/single_color/vs.vert", "assets/shaders/single_color/ps.frag");
-
-    resource.add_shader("flat", "assets/shaders/flat/vs.vert", "assets/shaders/flat/ps.frag");
-
-    resource.add_shader("phong", "assets/shaders/phong/vs.vert", "assets/shaders/phong/ps.frag");
-    resource.add_shader("pbr", "assets/shaders/pbr/vs.vert", "assets/shaders/pbr/ps.frag");
-    resource.add_shader("skybox", "assets/shaders/skybox/vs.vert", "assets/shaders/skybox/ps.frag");
-    
-    resource.add_texture("default_normal", "assets/textures/black.jpg");
-    resource.add_texture("white", "assets/textures/white.jpg");
-
-    resource.load_gltf("wood_floor", "assets/materials/wood_floor_deck/wood_floor_deck_1k.gltf");
-    resource.load_gltf("teapot", "assets/model/teapot/teapot.gltf");
-    resource.load_gltf("gold", "assets/materials/gold/gold.gltf");
-    resource.load_gltf("stone", "assets/materials/stone/stone.gltf");
-    //resource.load_gltf("ring", "assets/model/ring/ring.gltf");
-
-    resource.add_texture("wood_diffusion", "assets/materials/wood_flat/basecolor.jpg");
+    resource.load_json("assets/resources.json");
 
     Vector3f color_while{1.0f, 1.0f, 1.0f};
     resource.add_material("wood_flat",
                           MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
     resource.add_material("wood_phong",
                           MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
-
-    resource.add_cubemap("skybox_valley_color", "assets/skybox/valley");
 
     resource.add_mesh("default", {}, {});
 
