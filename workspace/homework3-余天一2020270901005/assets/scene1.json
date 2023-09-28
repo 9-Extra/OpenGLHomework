@@ -1,0 +1,93 @@
+{
+    "objects": [
+        {
+            "transform": {
+                "position": [
+                    0.0,
+                    -5.0,
+                    -10.0
+                ],
+                "rotation": [
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                "scale": [
+                    3.0,
+                    3.0,
+                    3.0
+                ]
+            },
+            "parts": [
+                {
+                    "transform": {},
+                    "mesh": "wood_floor.Sphere.001",
+                    "material": "wood_floor.wood_floor_deck"
+                }
+            ]
+        },
+        {
+            "transform": {
+                "position": [
+                    0.0, 5.0, -10.0
+                ],
+                "rotation": [
+                    0.0, 1.57, 0.0
+                ]
+            },
+            "parts": [
+                {
+                    "mesh": "teapot.teapot",
+                    "material": "wood_floor.wood_floor_deck"
+                }
+            ]
+        },
+        {
+            "transform": {
+                "position": [
+                    0.0, -10.0, 0.0
+                ],
+                "rotation": [
+                    0.0, -1.57, 0.0
+                ],
+                "scale": [
+                    40.0, 40.0, 1.0
+                ]
+            },
+            "parts": [
+                {
+                    "mesh": "plane",
+                    "material": "stone.stone"
+                }
+            ]
+        },
+        {
+            "transform": {
+                "position": [
+                    10.0, -5.0, -5.0
+                ],
+                "scale": [
+                    2, 2, 2
+                ]
+            },
+            "parts": [
+                {
+                    "mesh": "gold.\u7acb\u65b9\u4f53",
+                    "material": "gold.gold"
+                }
+            ]
+        }
+    ],
+    "pointlights": [
+        {
+            "position": [0, 0, 0],
+            "color": [1, 1, 1],
+            "factor": 40
+        },
+        {
+            "position": [0, 5, -30],
+            "color": [0, 0.4, 1],
+            "factor": 80
+        }
+    ]
+}

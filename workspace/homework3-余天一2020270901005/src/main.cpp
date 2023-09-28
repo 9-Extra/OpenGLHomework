@@ -818,9 +818,9 @@ struct CubeMap {
 
 struct MaterialDesc {
     struct UniformDataDesc {
-        uint32_t binding_id;
-        uint32_t size;
-        void *data;
+        const uint32_t binding_id;
+        const uint32_t size;
+        const void *data;
     };
 
     struct SampleData {
@@ -1575,6 +1575,33 @@ const std::vector<Vertex> plane_vertices = {
 const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
 } // namespace Assets
 
+std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t edge_count){
+    assert((size_t)edge_count * 3 <= std::numeric_limits<uint16_t>::max());
+    // 生产circle的顶点
+    std::vector<Vertex> circle_vertices(edge_count + 1);
+    // 中心点为{0, 0, 0}，半径为1，edge_count边型，edge_count + 1个顶点
+    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
+    for (uint16_t i = 1; i < circle_vertices.size(); i++) {
+        float angle = to_radian(360.0f / edge_count * (i - 1));
+        Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
+        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
+    }
+
+    std::vector<uint16_t> circle_indices(edge_count * 3); // edge_count个三角形
+    for (uint16_t i = 0; i <= edge_count - 1; i++) {           // 前edge_count - 1个
+        // 逆时针
+        circle_indices[i * 3] = 0;
+        circle_indices[i * 3 + 1] = i + 2;
+        circle_indices[i * 3 + 2] = i + 1;
+    }
+    // 最后一个
+    circle_indices[edge_count * 3 - 3] = 0;
+    circle_indices[edge_count * 3 - 2] = 1;
+    circle_indices[edge_count * 3 - 1] = edge_count;
+
+    return {circle_vertices, circle_indices};
+}
+
 void init_resource() {
     RenderReousce &resource = resources;
 
@@ -1586,42 +1613,76 @@ void init_resource() {
     resource.add_material("wood_phong",
                           MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
 
+    {
+        MaterialDesc green_material_desc;
+        Vector3f color_green{0.0f, 1.0f, 0.0f};
+        green_material_desc.shader_name = "single_color";
+        green_material_desc.uniforms.emplace_back(MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), color_green.data()});
+        resource.add_material("default", green_material_desc);
+    }
+
     resource.add_mesh("default", {}, {});
-
-    MaterialDesc green_material_desc;
-    Vector3f color_green{0.0f, 1.0f, 0.0f};
-    green_material_desc.shader_name = "single_color";
-    green_material_desc.uniforms.emplace_back(MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), &color_green});
-    resource.add_material("default", green_material_desc);
-
     resource.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
     resource.add_mesh("skybox_cube", Assets::cube_vertices, Assets::cube_indices);
 
-    // 生产circle的顶点
-    std::vector<Vertex> circle_vertices(101);
-    // 中心点为{0, 0, 0}，半径为1，100边型，101个顶点
-    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
-    for (uint32_t i = 1; i < 101; i++) {
-        float angle = to_radian(360.0f / 100 * (i - 1));
-        Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
-        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
+    {
+        auto [circle_vertices, circle_indices] = generate_circle(100);
+        resource.add_mesh("circle", circle_vertices, circle_indices);
     }
-
-    std::vector<uint16_t> circle_indices(300); // 100个三角形
-    for (uint32_t i = 0; i <= 99; i++) {           // 前99个
-        // 逆时针
-        circle_indices[i * 3] = 0;
-        circle_indices[i * 3 + 1] = i + 2;
-        circle_indices[i * 3 + 2] = i + 1;
-    }
-    // 最后一个
-    circle_indices[297] = 0;
-    circle_indices[298] = 1;
-    circle_indices[299] = 100;
-
-    resource.add_mesh("circle", circle_vertices, circle_indices);
 }
 
+Vector3f load_vec3(const SimpleJson::JsonObject& json){
+    assert(json.get_type() == SimpleJson::JsonType::List);
+    const std::vector<SimpleJson::JsonObject>& numbers = json.get_list();
+    return {(float)numbers[0].get_number(), (float)numbers[1].get_number(), (float)numbers[2].get_number()};
+}
+
+Transform load_transform(const SimpleJson::JsonObject& json){
+    Transform trans{
+        {0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 1.0f},
+    };
+    if (json.has("transform")){
+        const SimpleJson::JsonObject& t = json["transform"];
+        if (t.has("position")){
+            trans.position = load_vec3(t["position"]);
+        }
+        if (t.has("rotation")){
+            trans.rotation = load_vec3(t["rotation"]);
+        }
+        if (t.has("scale")){
+            trans.scale = load_vec3(t["scale"]);
+        }
+    }
+
+    return trans;
+}
+
+void load_scene_from_json(const std::string& path){
+    SimpleJson::JsonObject json = SimpleJson::parse_file(path);
+    //加载物体
+    for(const SimpleJson::JsonObject& object_desc: json["objects"].get_list()){
+        GObjectDesc desc{
+            load_transform(object_desc),
+            {}
+        };
+        for(const SimpleJson::JsonObject& part_desc : object_desc["parts"].get_list()){
+            desc.parts.emplace_back(part_desc["mesh"].get_string(), part_desc["material"].get_string());
+        }
+
+        world.create_object<GObject>(std::move(desc));
+    }
+    //加载点光源
+    size_t light_index = 0;
+    for(const SimpleJson::JsonObject& pointlight_desc: json["pointlights"].get_list()){
+        PointLight& light = world.pointlights[light_index++];
+        light.enabled = true;
+        light.position = load_vec3(pointlight_desc["position"]);
+        light.color = load_vec3(pointlight_desc["color"]);
+        light.factor = (float)pointlight_desc["factor"].get_number();
+    }
+}
 void init_start_scene() {
     {
         Camera &desc = world.camera;
@@ -1637,45 +1698,8 @@ void init_start_scene() {
         world.skybox_color_texture_id = resources.cubemaps.get(resources.cubemaps.find("skybox_valley_color")).texture_id;
     }
 
-    {
-        PointLight& light = world.pointlights[1];
-        light.enabled = true;
-        light.color = {1.0f, 1.0f, 1.0f};
-        light.factor = 40.0f;
-        light.position = {0.0f, 0.0f, 0.0f};
-    }
+    load_scene_from_json("assets/scene1.json");
 
-    {
-        PointLight &light = world.pointlights[2];
-        light.enabled = true;
-        light.color = {0.0f, 0.4f, 1.0f};
-        light.factor = 80.0f;
-        light.position = {0.0f, 5.0f, -30.0f};
-    }
-
-    {
-        world.create_object(
-            GObjectDesc{{{0.0f, -5.0f, -10.0f}, {0.0f, 0.0f, 0.0f}, {3.0f, 3.0f, 3.0f}}, {{"wood_floor.Sphere.001", "wood_floor.wood_floor_deck"}}});
-    }
-    {
-        world.create_object(
-            GObjectDesc{{{0.0f, 5.0f, -10.0f}, {0.0f, 1.57f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {{"teapot.teapot", "wood_floor.wood_floor_deck"}}});
-    }
-    {
-        world.create_object(GObjectDesc{{{0.0f, -10.0f, 0.0f}, {0.0f, -1.57f, 0.0f}, {40.0f, 40.0f, 1.0f}},
-                                        {{"plane", "stone.stone"}}});
-    }
-
-    {
-        world.create_object(GObjectDesc{{{10.0f, -5.0f, -5.0f}, {0.0f, 0.0f, 0.0f}, {2.0f, 2.0f, 2.0f}},
-                                        {{R"(gold.\u7acb\u65b9\u4f53)", "gold.gold"}}});
-    }
-    
-    {
-        //auto platform = world.create_object();
-        //platform->add_part(GameObjectPart{"ring.Black", "default"});
-        //platform->transform = {{0.0f, -2.0f, -20.0f}, {0.0f, 0.0f, 0.0f}, {10.0f, 10.0f, 10.0f}};
-    }
 }
 
 inline unsigned int calculate_fps(float delta_time) {
@@ -1889,7 +1913,7 @@ public:
         handle_keyboard(world.clock.get_delta());
         handle_mouse();
 
-        world.pointlights[1].position.x = 20.0f * sinf(render_info.tick_count * 0.01f);
+        world.pointlights[0].position.x = 20.0f * sinf(render_info.tick_count * 0.01f);
         world.is_light_dirty = true;
     }
 };
