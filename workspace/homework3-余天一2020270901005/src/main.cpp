@@ -4,7 +4,6 @@
 #include <assert.h>
 #include <chrono>
 #include <cmath>
-#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -464,7 +463,31 @@ struct Vector3f {
         return os;
     }
 };
+struct Vector4f {
+    union {
+        struct {
+            float x, y, z, w;
+        };
+        float v[4];
+    };
 
+    Vector4f(){}
+    Vector4f(float x, float y, float z, float w): x(x), y(y), z(z), w(w){}
+
+    inline Vector4f operator*(const float n) const { return {x * n, y * n, z * n, w * n}; }
+
+    float dot(const Vector4f b) const { return x * b.x + y * b.y + z * b.z + w * b.w; }
+    float square() const {return this->dot(*this);}
+    Vector4f normalize() const {
+        float inv_sqrt = Q_rsqrt(this->square());
+        return *this * inv_sqrt;
+    }
+
+    friend std::ostream &operator<<(std::ostream &os, const Vector4f &v) {
+        os << "(" << v.x << ", " << v.y << ", " << v.z  << ", " << v.w << ")";
+        return os;
+    }
+};
 struct Matrix {
     float m[4][4];
 
@@ -783,6 +806,7 @@ struct Transform {
 struct Vertex {
     Vector3f position;
     Vector3f normal;
+    Vector4f tangent;
     Vector2f uv;
 };
 
@@ -874,7 +898,15 @@ class RenderReousce final {
 public:
     template <class T> class ResourceContainer {
     public:
-        uint32_t find(const std::string &key) const { return look_up.at(key); }
+        uint32_t find(const std::string &key) const {
+#ifndef NDEBUG
+            if (look_up.find(key) == look_up.end()){
+                std::cerr << "Unknown key: " << key << std::endl;
+                exit(-1);    
+            }
+#endif
+            return look_up.at(key); 
+        }
 
         void add(const std::string &key, T &&item) {
             uint32_t id = (uint32_t)container.size();
@@ -900,6 +932,9 @@ public:
     ResourceContainer<Texture> textures;
     ResourceContainer<CubeMap> cubemaps;
 
+    std::vector<std::function<void()>> deconstructors;
+
+
     void add_mesh(const std::string &key, const Vertex *vertices, size_t vertex_count, const uint16_t *const indices,
                   size_t indices_count) {
         std::cout << "Load mesh: " << key << std::endl;
@@ -918,10 +953,12 @@ public:
 
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vector3f));
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f) + sizeof(Vector4f)));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
+        glEnableVertexAttribArray(3);
 
         checkError();
 
@@ -1072,7 +1109,7 @@ public:
                 std::string bin_path = root + buffer["uri"].get_string();
                 Buffer &b = buffers.emplace_back((size_t)buffer["byteLength"].get_number());
                 FILE* read;
-                if (fopen_s(&read, bin_path.c_str(), "rb")){
+                if (fopen_s(&read, bin_path.c_str(), "rb") != 0){
                     std::cerr << "Falied to read file: " << bin_path << std::endl;
                     exit(-1);
                 }
@@ -1093,6 +1130,7 @@ public:
                 const Json &position_buffer = get_buffer(primitive["attributes"]["POSITION"].get_uint());
                 const Json &normal_buffer = get_buffer(primitive["attributes"]["NORMAL"].get_uint());
                 const Json &uv_buffer = get_buffer(primitive["attributes"]["TEXCOORD_0"].get_uint());
+                const Json &tangent_buffer = get_buffer(primitive["attributes"]["TANGENT"].get_uint());
 
                 uint32_t indices_count = json["accessors"][primitive["indices"].get_uint()]["count"].get_uint();
                 uint16_t *indices_ptr = (uint16_t *)((char *)buffers[indices_buffer["buffer"].get_uint()].ptr +
@@ -1101,17 +1139,20 @@ public:
                 uint32_t vertex_count = position_buffer["byteLength"].get_uint() / sizeof(Vector3f);
                 uint32_t normal_count = normal_buffer["byteLength"].get_uint() / sizeof(Vector3f);
                 uint32_t uv_count = uv_buffer["byteLength"].get_uint() / sizeof(Vector2f);
-                assert(vertex_count == normal_count && vertex_count == uv_count);
+                uint32_t tangent_count = tangent_buffer["byteLength"].get_uint() / sizeof(Vector4f);
+                assert(vertex_count == normal_count && vertex_count == uv_count && vertex_count == tangent_count);
                 Vector3f *pos = (Vector3f *)((char *)buffers[position_buffer["buffer"].get_uint()].ptr +
                                              position_buffer["byteOffset"].get_uint());
                 Vector3f *normal = (Vector3f *)((char *)buffers[normal_buffer["buffer"].get_uint()].ptr +
                                                 normal_buffer["byteOffset"].get_uint());
                 Vector2f *uv = (Vector2f *)((char *)buffers[uv_buffer["buffer"].get_uint()].ptr +
                                             uv_buffer["byteOffset"].get_uint());
+                Vector4f *tangent = (Vector4f*)((char *)buffers[tangent_buffer["buffer"].get_uint()].ptr +
+                                            tangent_buffer["byteOffset"].get_uint());
 
                 std::vector<Vertex> vertices(vertex_count);
                 for (uint32_t i = 0; i < vertex_count; i++) {
-                    vertices[i] = {pos[i], normal[i], uv[i]};
+                    vertices[i] = {pos[i], normal[i], tangent[i], uv[i]};
                 }
 
                 add_mesh(key, vertices.data(), vertices.size(), indices_ptr, indices_count);
@@ -1212,8 +1253,6 @@ public:
     }
 
 private:
-    std::vector<std::function<void()>> deconstructors;
-
     static FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path){
         FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
         if (pImage_ori == nullptr) {
@@ -1366,7 +1405,7 @@ public:
     PointLight pointlights[POINTLIGNT_MAX];
     bool is_light_dirty = true;
 
-    float fog_min_distance = 20.0f;
+    float fog_min_distance = 5.0f;
     float fog_density = 0.001f;
 
     template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
@@ -1558,20 +1597,18 @@ void GObject::render() {
 
 namespace Assets {
 
-const std::vector<Vertex> cube_vertices = {
-    {{-1.0, -1.0, -1.0}, {0.0, 0.0, 0.0}, {0.0, 0.0}}, {{1.0, -1.0, -1.0}, {1.0, 0.0, 0.0}, {0.0, 0.0}},
-    {{1.0, 1.0, -1.0}, {1.0, 1.0, 0.0}, {0.0, 0.0}},   {{-1.0, 1.0, -1.0}, {0.0, 1.0, 0.0}, {0.0, 0.0}},
-    {{-1.0, -1.0, 1.0}, {0.0, 0.0, 1.0}, {0.0, 0.0}},  {{1.0, -1.0, 1.0}, {1.0, 0.0, 1.0}, {0.0, 0.0}},
-    {{1.0, 1.0, 1.0}, {1.0, 1.0, 1.0}, {0.0, 0.0}},    {{-1.0, 1.0, 1.0}, {0.0, 1.0, 1.0}, {0.0, 0.0}}};
+const std::vector<Vector3f> skybox_cube_vertices = {{-1.0, -1.0, -1.0}, {1.0, -1.0, -1.0}, {1.0, 1.0, -1.0},
+                                                    {-1.0, 1.0, -1.0},  {-1.0, -1.0, 1.0}, {1.0, -1.0, 1.0},
+                                                    {1.0, 1.0, 1.0},    {-1.0, 1.0, 1.0}};
 
-const std::vector<uint16_t> cube_indices = {3, 0, 1, 1, 2, 3, 6, 7, 3, 3, 2, 6, 0, 3, 7, 7, 4, 0,
+const std::vector<uint16_t> skybox_cube_indices = {3, 0, 1, 1, 2, 3, 6, 7, 3, 3, 2, 6, 0, 3, 7, 7, 4, 0,
                                             5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
 
 const std::vector<Vertex> plane_vertices = {
-    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+    {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
 };
 
 const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
@@ -1582,11 +1619,11 @@ std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t 
     // 生产circle的顶点
     std::vector<Vertex> circle_vertices(edge_count + 1);
     // 中心点为{0, 0, 0}，半径为1，edge_count边型，edge_count + 1个顶点
-    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
+    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
     for (uint16_t i = 1; i < circle_vertices.size(); i++) {
         float angle = to_radian(360.0f / edge_count * (i - 1));
         Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
-        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
+        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
     }
 
     std::vector<uint16_t> circle_indices(edge_count * 3); // edge_count个三角形
@@ -1609,12 +1646,12 @@ void init_resource() {
 
     resource.load_json("assets/resources.json");
 
-    Vector3f color_while{1.0f, 1.0f, 1.0f};
-    resource.add_material("wood_flat",
-                          MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
-    resource.add_material("wood_phong",
-                          MaterialDesc{"phong", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
-
+    {
+        Vector3f color_while{1.0f, 1.0f, 1.0f};
+        resource.add_material("wood_flat",
+                            MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
+    }
+    
     {
         MaterialDesc green_material_desc;
         Vector3f color_green{0.0f, 1.0f, 0.0f};
@@ -1626,7 +1663,39 @@ void init_resource() {
 
     resource.add_mesh("default", {}, {});
     resource.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
-    resource.add_mesh("skybox_cube", Assets::cube_vertices, Assets::cube_indices);
+
+    //添加天空盒的mesh，因为格式不一样所以单独处理
+    {
+        unsigned int vao_id, ibo_id, vbo_id;
+        glGenVertexArrays(1, &vao_id);
+        glGenBuffers(1, &ibo_id);
+        glGenBuffers(1, &vbo_id);
+
+        glBindVertexArray(vao_id);
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
+        glBufferData(GL_ARRAY_BUFFER, Assets::skybox_cube_vertices.size() * sizeof(Vector3f), Assets::skybox_cube_vertices.data(), GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, Assets::skybox_cube_indices.size() * sizeof(uint16_t), Assets::skybox_cube_indices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vector3f), (void *)0);
+        glEnableVertexAttribArray(0);
+
+        checkError();
+
+        glBindVertexArray(0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        resource.meshes.add("skybox_cube", Mesh{vao_id, (uint32_t)Assets::skybox_cube_indices.size()});
+        resource.deconstructors.emplace_back([vao_id, vbo_id, ibo_id]() {
+            glDeleteVertexArrays(1, &vao_id);
+            glDeleteBuffers(1, &vbo_id);
+            glDeleteBuffers(1, &ibo_id);
+            checkError();
+        });
+    }
 
     {
         auto [circle_vertices, circle_indices] = generate_circle(100);
@@ -1808,19 +1877,18 @@ public:
     void handle_mouse() {
         // 使用鼠标中键旋转视角
         //  左上角为(0,0)，右下角为(w,h)
-        static bool is_middle_button_down = false;
         static bool is_left_button_down = false;
         static bool is_right_button_down = false;
 
         if (!is_left_button_down && input.is_left_button_down()) {
+            world.pointlights[0].enabled = false;
             world.pointlights[1].enabled = false;
-            world.pointlights[2].enabled = false;
             world.is_light_dirty = true;
         }
 
         if (!is_right_button_down && input.is_right_button_down()) {
+            world.pointlights[0].enabled = true;
             world.pointlights[1].enabled = true;
-            world.pointlights[2].enabled = true;
             world.is_light_dirty = true;
         }
 
@@ -1853,7 +1921,6 @@ public:
 
         is_left_button_down = input.is_left_button_down();
         is_right_button_down = input.is_right_button_down();
-        is_middle_button_down = input.is_middle_button_down();
     }
 
     void handle_keyboard(float delta) {

@@ -24,7 +24,7 @@
             "parts": [
                 {
                     "transform": {},
-                    "mesh": "wood_floor.Sphere.001",
+                    "mesh": "wood_floor.Sphere",
                     "material": "wood_floor.wood_floor_deck"
                 }
             ]

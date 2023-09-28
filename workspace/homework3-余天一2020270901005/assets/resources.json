@@ -8,10 +8,6 @@
             "vs_path": "shaders/flat/vs.vert",
             "ps_path": "shaders/flat/ps.frag"
         },
-        "phong":{
-            "vs_path": "shaders/phong/vs.vert",
-            "ps_path": "shaders/phong/ps.frag"
-        },
         "pbr":{
             "vs_path": "shaders/pbr/vs.vert",
             "ps_path": "shaders/pbr/ps.frag"
