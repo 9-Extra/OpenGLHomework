@@ -806,7 +806,7 @@ struct Transform {
 struct Vertex {
     Vector3f position;
     Vector3f normal;
-    Vector4f tangent;
+    Vector3f tangent;
     Vector2f uv;
 };
 
@@ -952,9 +952,9 @@ public:
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(uint16_t), indices, GL_STATIC_DRAW);
 
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vector3f));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f)));
-        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vector3f) + sizeof(Vector3f) + sizeof(Vector4f)));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vertex::position));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vertex::position) + sizeof(Vertex::normal)));
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vertex::position) + sizeof(Vertex::normal) + sizeof(Vertex::tangent)));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
@@ -1152,7 +1152,9 @@ public:
 
                 std::vector<Vertex> vertices(vertex_count);
                 for (uint32_t i = 0; i < vertex_count; i++) {
-                    vertices[i] = {pos[i], normal[i], tangent[i], uv[i]};
+                    //tangent的第四个分量是用来根据平台决定手性的，在opengl中始终应该取1
+                    Vector3f tang = Vector3f(tangent[i].x, tangent[i].y, tangent[i].z);
+                    vertices[i] = {pos[i], normal[i], tang, uv[i]};
                 }
 
                 add_mesh(key, vertices.data(), vertices.size(), indices_ptr, indices_count);
@@ -1605,10 +1607,10 @@ const std::vector<uint16_t> skybox_cube_indices = {3, 0, 1, 1, 2, 3, 6, 7, 3, 3,
                                             5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
 
 const std::vector<Vertex> plane_vertices = {
-    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-    {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}},
-    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}},
+    {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
+    {{1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 1.0f}},
+    {{1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+    {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
 };
 
 const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
@@ -1619,11 +1621,11 @@ std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t 
     // 生产circle的顶点
     std::vector<Vertex> circle_vertices(edge_count + 1);
     // 中心点为{0, 0, 0}，半径为1，edge_count边型，edge_count + 1个顶点
-    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {0.5f, 0.5f}}; // 中心点
+    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.5f, 0.5f}}; // 中心点
     for (uint16_t i = 1; i < circle_vertices.size(); i++) {
         float angle = to_radian(360.0f / edge_count * (i - 1));
         Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
-        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f, 1.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
+        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
     }
 
     std::vector<uint16_t> circle_indices(edge_count * 3); // edge_count个三角形
