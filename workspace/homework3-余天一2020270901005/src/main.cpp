@@ -51,6 +51,41 @@
 #include <Windows.h>
 #include <FreeImage.h>
 
+//Mingw的ifstream不知道为什么导致了崩溃，手动实现文件读取
+std::string read_whole_file(const std::string& path) {
+    HANDLE handle =
+        CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                    FILE_ATTRIBUTE_READONLY | FILE_FLAG_SEQUENTIAL_SCAN , NULL);
+    if (handle == INVALID_HANDLE_VALUE) {
+        std::cerr << "Failed to open file: " << path << std::endl;
+        exit(-1);
+    }
+
+    LARGE_INTEGER size;
+    if (!GetFileSizeEx(handle, &size)) {
+        std::cerr << "Failed to get file size\n";
+        exit(-1);
+    }
+    std::string chunk;
+    chunk.resize(size.QuadPart);
+
+    char *ptr = (char *)chunk.data();
+    char *end = ptr + chunk.size();
+    DWORD read = 0;
+    while (ptr < end) {
+        DWORD to_read = (DWORD)std::min<size_t>(std::numeric_limits<DWORD>::max(), end - ptr);
+        if (!ReadFile(handle, ptr, to_read, &read, NULL)) {
+            std::cerr << "Failed to read file\n";
+            exit(-1);
+        }
+        ptr += read;
+    }
+
+    CloseHandle(handle);
+
+    return chunk;
+}
+
 namespace SimpleJson {
 // 极简json解析库，并没有完全实现json的所有解析功能，任何格式错误都可能导致死循环或者崩溃
 struct json_null {};
@@ -314,13 +349,8 @@ inline JsonObject parse_stream(std::istream &stream) {
     return parse(str);
 }
 
-inline JsonObject parse_file(const std::string &path) {
-    std::ifstream file(path);
-    if (!file.is_open()) {
-        std::cerr << "Con't open file: " << path << std::endl;
-        exit(-1);
-    }
-    return parse_stream(file);
+inline JsonObject parse_file(const std::string &path) {    
+    return parse(read_whole_file(path));
 }
 } // namespace SimpleJson
 
@@ -708,19 +738,8 @@ unsigned int complie_shader(const char *const src, unsigned int shader_type) {
 }
 
 unsigned int complie_shader_program(const std::string &vs_path, const std::string &ps_path) {
-    std::ifstream vs_read(vs_path);
-    if (!vs_read.is_open()) {
-        std::cerr << "Can't open file: " << vs_path;
-        exit(-1);
-    }
-    std::string vs_src((std::istreambuf_iterator<char>(vs_read)), std::istreambuf_iterator<char>());
-
-    std::ifstream ps_read(ps_path);
-    if (!ps_read.is_open()) {
-        std::cerr << "Can't open file: " << ps_path;
-        exit(-1);
-    }
-    std::string ps_src((std::istreambuf_iterator<char>(ps_read)), std::istreambuf_iterator<char>());
+    std::string vs_src = read_whole_file(vs_path);
+    std::string ps_src = read_whole_file(ps_path);
 
     unsigned int vs = complie_shader(vs_src.c_str(), GL_VERTEX_SHADER);
     unsigned int ps = complie_shader(ps_src.c_str(), GL_FRAGMENT_SHADER);
@@ -1006,7 +1025,6 @@ public:
             FIBITMAP* pImage = freeimage_load_and_convert_image(*textures_faces[i]);
 
             unsigned int nWidth = FreeImage_GetWidth(pImage);
-            // std::cout << nWidth << std::endl;
             unsigned int nHeight = FreeImage_GetHeight(pImage);
             glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, nWidth, nHeight, 0, GL_BGR, GL_UNSIGNED_BYTE,
                          (void *)FreeImage_GetBits(pImage));
@@ -1053,9 +1071,13 @@ public:
             for (const Json &buffer : json["buffers"].get_list()) {
                 std::string bin_path = root + buffer["uri"].get_string();
                 Buffer &b = buffers.emplace_back((size_t)buffer["byteLength"].get_number());
-                std::ifstream read(bin_path, std::ios_base::in | std::ios_base::binary);
-                read.read((char *)b.ptr, b.len);
-                read.close();
+                FILE* read;
+                if (fopen_s(&read, bin_path.c_str(), "rb")){
+                    std::cerr << "Falied to read file: " << bin_path << std::endl;
+                    exit(-1);
+                }
+                fread((char *)b.ptr, 1, b.len, read);
+                fclose(read);
             }
         }
         auto get_buffer = [&](uint64_t accessor_id) -> const Json & {
@@ -1144,7 +1166,6 @@ public:
 
     void load_json(const std::string &path) {
         SimpleJson::JsonObject json = SimpleJson::parse_file(path);
-        std::cout << path << std::endl;
         std::string base_dir;
         if (size_t it = path.find_last_of("/\\"); it != std::string::npos) {
             base_dir = path.substr(0, it + 1); // 包含'/'
@@ -1761,7 +1782,7 @@ void World::render() {
         obj->render();
     }
 
-    render_skybox();
+    //render_skybox();
 
     glutSwapBuffers();
     checkError();
@@ -1894,15 +1915,13 @@ public:
 };
 
 int main(int argc, char **argv) {
-    std::cout << "Hello\n";
-
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowPosition(50, 100);
-    glutInitWindowSize(400, 300);
+    glutInitWindowSize(1080, 720);
     glutCreateWindow(MY_TITLE);
 
-    set_viewport(0, 0, 400, 300);
+    set_viewport(0, 0, 1080, 720);
 
     glutIdleFunc(loop_func);
     glutDisplayFunc([]() {});
