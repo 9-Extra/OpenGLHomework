@@ -31,6 +31,7 @@ layout(binding = 2) uniform sampler2D metallic_roughness_texture;
 in VS_OUT
 {
     vec3 normal;
+    vec3 tangent;
     vec3 world_position;
     vec2 tex_coords;
 } vs_out;
@@ -132,9 +133,17 @@ vec3 pbr(vec3 viewer_pos, vec3 world_pos, vec3 light_pos, vec3 light_intensity, 
     return BRDF(L, V, N, F0, basecolor, metallic, roughness);
 }
 
+vec3 caculate_normal(){
+    const vec3 normal = normalize(vs_out.normal);
+    const vec3 tangent = normalize(vs_out.tangent);
+    //需要反向gamma矫正以获取正确的数值
+    vec3 texture_value = (pow(texture(normal_texture, vs_out.tex_coords).xyz, vec3(1 / 2.2)) - 0.5) * 2;
+    return tangent * texture_value.x + cross(normal, tangent) * texture_value.y + normal * texture_value.z;
+}
+
 void main()
 {
-    const vec3 normal = normalize(vs_out.normal);
+    const vec3 normal = caculate_normal();
     const vec3 basecolor = texture(basecolor_texture, vs_out.tex_coords).xyz;
     const vec3 metallic_roughness = texture(metallic_roughness_texture, vs_out.tex_coords).xyz;
     float metallic = metallic_roughness.x * metallic_factor;
@@ -167,4 +176,5 @@ void main()
     // }
 
     out_color = vec4(pow(result_color, vec3(1 / 2.2)), 1.0f);
+    //out_color = vec4(max(normal,0), 1.0f);
 }

@@ -31,6 +31,7 @@ layout(binding = 1, std140) uniform per_object
 out VS_OUT
 {
     vec3 normal;
+    vec3 tangent;
     vec3 world_position;
     vec2 tex_coords;
 } vs_out;
@@ -40,6 +41,7 @@ void main()
     vec4 world_position = model_matrix * vec4(position.xyz, 1.0f);
     vs_out.world_position = world_position.xyz / world_position.w;
     vs_out.normal = (normal_matrix * vec4(normal, 0.0f)).xyz;
+    vs_out.tangent = (normal_matrix * vec4(tangent, 0.0f)).xyz;
     vs_out.tex_coords = uv;
 
     gl_Position = view_perspective_matrix * world_position;

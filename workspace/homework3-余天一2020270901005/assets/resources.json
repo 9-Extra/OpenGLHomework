@@ -19,7 +19,7 @@
     },
     "texture": {
         "default_normal": {
-            "image": "textures/black.jpg"
+            "image": "textures/normal.jpg"
         },
         "white": {
             "image": "textures/white.jpg"
