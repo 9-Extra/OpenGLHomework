@@ -950,14 +950,8 @@ public:
 
     void add_texture(const std::string &key, const std::string &image_path) {
         std::cout << "Load texture: " << key << std::endl;
-        FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
-        if (pImage_ori == nullptr) {
-            std::cerr << "Failed to load image: " << image_path << std::endl;
-            exit(-1);
-        }
-        FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
-        FreeImage_FlipVertical(pImage);
-        FreeImage_Unload(pImage_ori);
+        
+        FIBITMAP* pImage = freeimage_load_and_convert_image(image_path);
 
         unsigned int nWidth = FreeImage_GetWidth(pImage);
         unsigned int nHeight = FreeImage_GetHeight(pImage);
@@ -1009,15 +1003,7 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
         for (unsigned int i = 0; i < textures_faces.size(); i++) {
-            const char *path = textures_faces[i]->c_str();
-            FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(path, 0), path);
-            if (pImage_ori == nullptr) {
-                std::cerr << "加载图像: " << textures_faces[i] << "失败\n";
-                exit(-1);
-            }
-            FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
-            FreeImage_FlipVertical(pImage);
-            FreeImage_Unload(pImage_ori);
+            FIBITMAP* pImage = freeimage_load_and_convert_image(*textures_faces[i]);
 
             unsigned int nWidth = FreeImage_GetWidth(pImage);
             // std::cout << nWidth << std::endl;
@@ -1206,6 +1192,20 @@ public:
 
 private:
     std::vector<std::function<void()>> deconstructors;
+
+    static FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path){
+        FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
+        if (pImage_ori == nullptr) {
+            std::cerr << "Failed to load image: " << image_path << std::endl;
+            exit(-1);
+        }
+        FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
+        FreeImage_FlipVertical(pImage);
+        FreeImage_AdjustGamma(pImage, 1 / 2.2);
+        FreeImage_Unload(pImage_ori);
+
+        return pImage;
+    }
 } resources;
 
 struct GameObjectPart {

@@ -85,12 +85,12 @@
         {
             "position": [0, 0, 0],
             "color": [1, 1, 1],
-            "factor": 40
+            "factor": 100
         },
         {
             "position": [0, 5, -30],
             "color": [0, 0.4, 1],
-            "factor": 80
+            "factor": 180
         }
     ]
 }
