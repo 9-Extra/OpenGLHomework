@@ -187,12 +187,103 @@ inline void match_and_skip(const char **const start, const char *str) {
     }
 }
 
+inline char from_hex(char c){
+    switch (c) {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':{
+            return c - '0';
+        }
+        case 'a':
+        case 'A':{
+            return 0xa;
+        }
+        case 'b':
+        case 'B':{
+            return 0xb;
+        }
+        case 'c':
+        case 'C':{
+            return 0xc;
+        }
+        case 'd':
+        case 'D':{
+            return 0xd;
+        }
+        case 'e':
+        case 'E':{
+            return 0xe;
+        }
+        case 'f':
+        case 'F':{
+            return 0xf;
+        }
+
+        default: {
+            assert(false);//错啦
+            return 0;
+        }
+    }
+}
+
 inline std::string parse_string(const char **const start) {
     assert(**start == '\"');
     std::string str;
     (*start)++;
     for (; **start != '\"'; (*start)++) {
-        str.push_back(**start);
+        // 转义字符特殊处理
+        if (**start == '\\'){
+            (*start)++;
+            switch (**start) {
+                case '\"': {
+                    str.push_back('\"');
+                    break;
+                }
+                case '\\': {
+                    str.push_back('\\');
+                    break;
+                }
+                
+                case 'n': {
+                    str.push_back('\n');
+                    break;
+                }
+                case 'r': {
+                    str.push_back('\r');
+                    break;
+                }
+                case 't': {
+                    str.push_back('\t');
+                    break;
+                }
+                case 'f': {
+                    str.push_back('\f');
+                    break;
+                }
+                case 'b': {
+                    str.push_back('\b');
+                    break;
+                }
+                case 'u': {
+                    char c1 = (from_hex(*(*start + 1)) << 4) + from_hex(*(*start + 2));
+                    *start += 2;
+                    char c2 = (from_hex(*(*start + 1)) << 4) + from_hex(*(*start + 2));
+                    *start += 2;
+                    str.push_back(c1);
+                    str.push_back(c2);
+                    break;
+                }
+            }
+        } else {
+            str.push_back(**start);
+        }
     }
     (*start)++; // 跳过后面的"号
     return str;
@@ -201,27 +292,46 @@ inline std::string parse_string(const char **const start) {
 inline bool is_number(char c) { return c <= '9' && c >= '0'; }
 inline double parse_number(const char **const start) {
     assert(is_number(**start) || **start == '.' || **start == '-');
-    double sign = 1.0;
+    //解析符号
+    bool positive = true;
     if (**start == '-') {
-        sign = -1.0;
+        positive = false;
         (*start)++;
     }
-    size_t before_dot = 0;
+    //解析整数
+    uint64_t base_num = 0;
+    int exp_num = 0;
     for (; is_number(**start); (*start)++) {
-        before_dot *= 10;
-        before_dot += (**start - '0');
+        base_num *= 10;
+        base_num += (**start - '0');
     }
-    double after_dot = 0;
-    double scale = 0.1;
+    //解析小数
     if (**start == '.') {
         (*start)++;
         for (; is_number(**start); (*start)++) {
-            after_dot += (**start - '0') * scale;
-            scale /= 10.0;
+            base_num *= 10;
+            base_num += (**start - '0');
+            exp_num--;
+        }
+    }
+    //解析指数
+    size_t given_exp = 0;
+    int exp_sign = 1;
+    if (**start == 'E' || **start == 'e'){
+        (*start)++;
+        if (**start == '-' || **start == '+'){
+            if (**start == '-') exp_sign = -1;
+            (*start)++;
+        }
+        for (; is_number(**start); (*start)++) {
+            given_exp *= 10;
+            given_exp += (**start - '0');
         }
     }
 
-    return (before_dot + after_dot) * sign;
+    exp_num += exp_sign * given_exp;
+    double num = base_num * std::pow<double>(10, exp_num); 
+    return positive ? num : -num;
 }
 
 inline JsonObject parse_object(const char **const start);
@@ -309,7 +419,6 @@ inline JsonObject parse_object(const char **const start) {
     case '7':
     case '8':
     case '9':
-    case '.':
     case '-': {
         *object.inner = parse_number(start);
         break;
@@ -1248,6 +1357,8 @@ public:
         meshes.clear();
         materials.clear();
         shaders.clear();
+        cubemaps.clear();
+        textures.clear();
         for (auto &de : deconstructors) {
             de();
         }
@@ -1853,7 +1964,7 @@ void World::render() {
         obj->render();
     }
 
-    //render_skybox();
+    render_skybox();
 
     glutSwapBuffers();
     checkError();
