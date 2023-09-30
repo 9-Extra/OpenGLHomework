@@ -489,7 +489,7 @@ struct Vector2f {
         float v[2];
     };
     Vector2f() : x(0), y(0) {}
-    Vector2f(float x, float y) : x(x), y(y) {}
+    constexpr Vector2f(float x, float y) : x(x), y(y) {}
     Vector2f operator+(const Vector2f b) { return Vector2f(x + b.x, y + b.y); }
     Vector2f operator-(const Vector2f b) { return Vector2f(x - b.x, y - b.y); }
     Vector2f operator*(const float s) { return Vector2f(x * s, y * s); }
@@ -517,22 +517,22 @@ struct Vector3f {
     };
 
     Vector3f() {}
-    Vector3f(float x, float y, float z) : x(x), y(y), z(z) {}
+    constexpr Vector3f(float x, float y, float z) : x(x), y(y), z(z) {}
 
     const float *data() const { return (float *)v; }
-    inline float operator[](const unsigned int i) const { return v[i]; }
-    inline Vector3f operator+(const Vector3f b) const { return Vector3f{x + b.x, y + b.y, z + b.z}; }
-    inline Vector3f operator-(const Vector3f b) const { return Vector3f{x - b.x, y - b.y, z - b.z}; }
-    inline Vector3f operator-() const { return Vector3f{-x, -y, -z}; }
-    inline Vector3f operator+=(const Vector3f b) { return *this = *this + b; }
-    inline Vector3f operator*(const float n) const { return {x * n, y * n, z * n}; }
-    inline Vector3f operator/(const float n) const { return *this * (1.0f / n); }
-    inline float dot(const Vector3f b) const { return x * b.x + y * b.y + z * b.z; }
-    inline Vector3f cross(const Vector3f b) {
+    constexpr float operator[](const unsigned int i) const { return v[i]; }
+    constexpr Vector3f operator+(const Vector3f b) const { return Vector3f{x + b.x, y + b.y, z + b.z}; }
+    constexpr Vector3f operator-(const Vector3f b) const { return Vector3f{x - b.x, y - b.y, z - b.z}; }
+    constexpr Vector3f operator-() const { return Vector3f{-x, -y, -z}; }
+    constexpr Vector3f operator+=(const Vector3f b) { return *this = *this + b; }
+    constexpr Vector3f operator*(const float n) const { return {x * n, y * n, z * n}; }
+    constexpr Vector3f operator/(const float n) const { return *this * (1.0f / n); }
+    constexpr float dot(const Vector3f b) const { return x * b.x + y * b.y + z * b.z; }
+    constexpr Vector3f cross(const Vector3f b) {
         return {this->y * b.z - this->z * b.y, this->z * b.x * this->x * b.z, this->x * b.y - this->y * b.x};
     }
-    inline float square() const { return this->dot(*this); }
-    inline Vector3f normalize() {
+    constexpr float square() const { return this->dot(*this); }
+    Vector3f normalize() {
         float inv_sqrt = Q_rsqrt(this->square());
         return *this * inv_sqrt;
     }
@@ -551,7 +551,7 @@ struct Vector4f {
     };
 
     Vector4f(){}
-    Vector4f(float x, float y, float z, float w): x(x), y(y), z(z), w(w){}
+    constexpr Vector4f(float x, float y, float z, float w): x(x), y(y), z(z), w(w){}
 
     inline Vector4f operator*(const float n) const { return {x * n, y * n, z * n, w * n}; }
     float dot(const Vector4f b) const { return x * b.x + y * b.y + z * b.z + w * b.w; }
@@ -569,14 +569,14 @@ struct Vector4f {
 struct Matrix {
     float m[4][4];
 
-    Matrix() {}
+    constexpr Matrix(): m{{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}} {}
     constexpr Matrix(float m00, float m01, float m02, float m03, float m10, float m11, float m12, float m13, float m20,
                      float m21, float m22, float m23, float m30, float m31, float m32, float m33)
         : m{{m00, m01, m02, m03}, {m10, m11, m12, m13}, {m20, m21, m22, m23}, {m30, m31, m32, m33}} {}
 
     const float *data() const { return (float *)m; }
 
-    inline Matrix transpose() const {
+    constexpr Matrix transpose() const {
         Matrix r;
         for (unsigned int i = 0; i < 4; i++) {
             for (unsigned int j = 0; j < 4; j++) {
@@ -592,7 +592,7 @@ struct Matrix {
 
         return m;
     }
-    inline Matrix operator*(const Matrix &m) const {
+    constexpr Matrix operator*(const Matrix &m) const {
         Matrix r;
         for (unsigned int i = 0; i < 4; i++) {
             for (unsigned int j = 0; j < 4; j++) {
@@ -603,7 +603,7 @@ struct Matrix {
         return r;
     }
     // 沿z轴顺时针旋转roll，沿x轴顺时针旋转pitch，沿y轴顺时针旋转yaw
-    inline static Matrix rotate(float roll, float pitch, float yaw) {
+    constexpr static Matrix rotate(float roll, float pitch, float yaw) {
         float s_p = sin(pitch), c_p = cos(pitch);
         float s_r = sin(roll), c_r = cos(roll);
         float s_y = sin(yaw), c_y = cos(yaw);
@@ -625,25 +625,25 @@ struct Matrix {
                  1.0};
         return m;
     }
-    inline static Matrix rotate(Vector3f rotate) { return Matrix::rotate(rotate.x, rotate.y, rotate.z); }
-    inline static Matrix translate(float x, float y, float z) {
+    constexpr static Matrix rotate(Vector3f rotate) { return Matrix::rotate(rotate.x, rotate.y, rotate.z); }
+    constexpr static Matrix translate(float x, float y, float z) {
         Matrix m{
             1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, y, 0.0, 0.0, 1.0, z, 0.0, 0.0, 0.0, 1.0,
         };
         return m;
     }
-    inline static Matrix translate(Vector3f delta) { return Matrix::translate(delta.x, delta.y, delta.z); }
-    inline static Matrix scale(float x, float y, float z) {
+    constexpr static Matrix translate(Vector3f delta) { return Matrix::translate(delta.x, delta.y, delta.z); }
+    constexpr static Matrix scale(float x, float y, float z) {
         Matrix m{
             x, 0.0, 0.0, 0.0, 0.0, y, 0.0, 0.0, 0.0, 0.0, z, 0.0, 0.0, 0.0, 0.0, 1.0,
         };
 
         return m;
     }
-    inline static Matrix scale(Vector3f scale) { return Matrix::scale(scale.x, scale.y, scale.z); }
+    constexpr static Matrix scale(Vector3f scale) { return Matrix::scale(scale.x, scale.y, scale.z); }
 };
 
-inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
+constexpr Matrix compute_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
     assert(near_z < far_z); // 不要写反了！！！！！！！！！！
     float SinFov = std::sin(fov * 0.5f);
     float CosFov = std::cos(fov * 0.5f);
@@ -670,59 +670,61 @@ inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, f
         .transpose();
 }
 
-// struct Quaternion {
-// 	float x, y, z, w;
+struct Quaternion {
+    float x, y, z, w;
 
-//     static constexpr Quaternion no_rotate(){
-//         return Quaternion{0.0f, 0.0f, 0.0f, 1.0f};
-//     }
+    static constexpr Quaternion no_rotate() { return Quaternion{0.0f, 0.0f, 0.0f, 1.0f}; }
 
-// 	//需要axis长度为1
-// 	static Quaternion from_rotation(Vector3f axis, float angle) {
-// 		angle = angle * 0.5f;
-// 		float sin_theta = sinf(angle), cos_theta = cosf(angle);
-// 		return Quaternion{ sin_theta * axis.x, sin_theta * axis.y
-// ,sin_theta * axis.z, cos_theta };
-// 	}
+    // 需要axis长度为1
+    static constexpr Quaternion from_rotation(Vector3f axis, float angle) {
+        angle = angle * 0.5f;
+        float sin_theta = sinf(angle), cos_theta = cosf(angle);
+        return Quaternion{sin_theta * axis.x, sin_theta * axis.y, sin_theta * axis.z, cos_theta};
+    }
 
-// 	//按XYZ顺序顺时针，沿X旋转的角度，沿Y旋转的角度，沿Z旋转的角度
-// 	static Quaternion from_eular(Vector3f rotate) {
-// 		return
-// 			Quaternion::from_rotation({ 1.0f, 0.0f, 0.0f }, rotate.x)
-// * 			Quaternion::from_rotation({ 0.0f, 1.0f, 0.0f }, rotate.y) *
-// 			Quaternion::from_rotation({ 0.0f, 0.0f, 1.0f },
-// rotate.z);
+    // 按XYZ顺序顺时针，沿X旋转的角度，沿Y旋转的角度，沿Z旋转的角度
+    static constexpr Quaternion from_eular(Vector3f rotate) {
+        return Quaternion::from_rotation({1.0f, 0.0f, 0.0f}, rotate.x) *
+               Quaternion::from_rotation({0.0f, 1.0f, 0.0f}, rotate.y) *
+               Quaternion::from_rotation({0.0f, 0.0f, 1.0f}, rotate.z);
+    }
 
-// 	}
+    // 需要长度为1
+    Matrix to_matrix() const {
+        return Matrix{1.0f - 2.0f * (y * y + z * z),
+                      2.0f * (x * y - w * z),
+                      2.0f * (x * z + w * y),
+                      0.0f,
+                      2.0f * (x * y + w * z),
+                      1.0f - 2.0f * (x * x + z * z),
+                      2.0f * (y * z - w * x),
+                      0.0f,
+                      2.0f * (x * z - w * y),
+                      2.0f * (y * z + w * x),
+                      1.0f - 2.0f * (x * x + y * y),
+                      0.0f,
+                      0.0f,
+                      0.0f,
+                      0.0f,
+                      1.0f};
+    }
 
-// 	//需要长度为1
-// 	Matrix4f to_matrix() const{
-// 		return Matrix4f{ {{
-// 			1.0f - 2.0f * (y * y + z * z), 2.0f * (x * y - w * z), 2.0f *
-// (x * z + w * y), 0.0f, 			2.0f * (x * y + w * z),1.0f - 2.0f * (x * x + z *
-// z), 2.0f * (y * z - w * x), 0.0f, 			2.0f * (x * z - w * y), 2.0f * (y * z + w *
-// x), 1.0f - 2.0f * (x * x + y * y), 0.0f, 			0.0f,0.0f,0.0f,1.0f
-// 		}} };
-// 	}
+    Vector3f rotate_vector(Vector3f src) const {
+        const Quaternion &q = *this;
+        Quaternion p{src.x, src.y, src.z, 1.0f};
+        Quaternion rotated = q * p * q.conjugate();
+        return Vector3f{rotated.x, rotated.y, rotated.z};
+    }
 
-// 	Vector3f rotate_vector(Vector3f src) const{
-// 		const Quaternion& q = *this;
-// 		Quaternion p{ src.x, src.y, src.z, 1.0f };
-// 		Quaternion rotated = q * p * q.conjugate();
-// 		return Vector3f{ rotated.x, rotated.y, rotated.z };
-// 	}
+    Quaternion conjugate() const { return Quaternion{-x, -y, -z, w}; }
 
-// 	Quaternion conjugate() const{
-// 		return Quaternion{ -x, -y, -z, w };
-// 	}
+    constexpr Quaternion operator*(const Quaternion r) const {
+        Vector3f qv{x, y, z}, rv{r.x, r.y, r.z};
+        Vector3f v = qv.cross(rv) + qv * r.w + rv * w;
 
-// 	Quaternion operator* (const Quaternion r) const{
-// 		Vector3f qv{ x, y, z }, rv{ r.x, r.y, r.z };
-// 		Vector3f v = qv.cross(rv) + qv * r.w + rv * w;
-
-// 		return Quaternion{ v.x, v.y, v.z, w * r.w - qv.dot(rv) };
-// 	}
-// };
+        return Quaternion{v.x, v.y, v.z, w * r.w - qv.dot(rv)};
+    }
+};
 
 inline void checkError() {
     GLenum error;
@@ -888,8 +890,8 @@ struct DirectionalLight {
 };
 
 struct Mesh {
-    const unsigned int VAO_id;
-    const uint32_t indices_count;
+    unsigned int VAO_id;
+    uint32_t indices_count;
 };
 
 struct TextureDesc {
@@ -897,11 +899,11 @@ struct TextureDesc {
 };
 
 struct Texture {
-    const unsigned int texture_id;
+    unsigned int texture_id;
 };
 
 struct CubeMap {
-    const unsigned int texture_id;
+    unsigned int texture_id;
 };
 
 struct MaterialDesc {
@@ -974,9 +976,15 @@ public:
         }
 
         void add(const std::string &key, T &&item) {
-            uint32_t id = (uint32_t)container.size();
-            container.emplace_back(std::move(item));
-            look_up[key] = id;
+            if (auto it = look_up.find(key);it != look_up.end()){
+                std::cout << "Add duplicated key: " << key << std::endl;
+                uint32_t id = it->second;
+                container[id] = std::move(item);
+            } else {
+                uint32_t id = (uint32_t)container.size();
+                container.emplace_back(std::move(item));
+                look_up[key] = id;
+            }
         }
 
         const T &get(uint32_t id) const { return container[id]; }
@@ -2054,13 +2062,16 @@ int main(int argc, char **argv) {
 
     world.register_system(new MoveSystem("move"));
 
+    //注册在退出时执行的清理操作
+    atexit([]{
+        resources.clear();
+        render_info.clear();
+        std::cout << "Exit!\n";
+    });
+
     world.clock.update();
 
     glutMainLoop();
 
-    // 可惜这些代码都不能执行
-    resources.clear();
-    render_info.clear();
-    std::cout << "Normal Exit!\n";
     return 0;
 }
