@@ -490,40 +490,22 @@ struct Vector2f {
     };
     Vector2f() : x(0), y(0) {}
     Vector2f(float x, float y) : x(x), y(y) {}
-
     Vector2f operator+(const Vector2f b) { return Vector2f(x + b.x, y + b.y); }
-
     Vector2f operator-(const Vector2f b) { return Vector2f(x - b.x, y - b.y); }
-
     Vector2f operator*(const float s) { return Vector2f(x * s, y * s); }
-
     float squared() { return x * x + y * y; }
-
     float length() { return sqrtf(squared()); }
-
     Vector2f normalized() {
         float s = Q_rsqrt(squared());
         return Vector2f(x * s, y * s);
     }
-
     Vector2f rotate(float radiam) {
         return Vector2f(x * cosf(radiam) + y * sinf(radiam), x * -sinf(radiam) + y * cosf(radiam));
     }
-
     friend std::ostream &operator<<(std::ostream &os, const Vector2f &v) {
         os << "(" << v.x << ", " << v.y << ")";
         return os;
     }
-};
-
-struct Color {
-    float r, g, b;
-
-    inline const float *data() const { return (float *)this; }
-
-    inline bool operator==(const Color &ps) { return r == ps.r && g == ps.g && b == ps.b; }
-
-    inline bool operator!=(const Color &ps) { return !(*this == ps); }
 };
 
 struct Vector3f {
@@ -538,35 +520,23 @@ struct Vector3f {
     Vector3f(float x, float y, float z) : x(x), y(y), z(z) {}
 
     const float *data() const { return (float *)v; }
-
     inline float operator[](const unsigned int i) const { return v[i]; }
-
     inline Vector3f operator+(const Vector3f b) const { return Vector3f{x + b.x, y + b.y, z + b.z}; }
-
     inline Vector3f operator-(const Vector3f b) const { return Vector3f{x - b.x, y - b.y, z - b.z}; }
-
     inline Vector3f operator-() const { return Vector3f{-x, -y, -z}; }
-
     inline Vector3f operator+=(const Vector3f b) { return *this = *this + b; }
-
     inline Vector3f operator*(const float n) const { return {x * n, y * n, z * n}; }
     inline Vector3f operator/(const float n) const { return *this * (1.0f / n); }
-
     inline float dot(const Vector3f b) const { return x * b.x + y * b.y + z * b.z; }
-
     inline Vector3f cross(const Vector3f b) {
         return {this->y * b.z - this->z * b.y, this->z * b.x * this->x * b.z, this->x * b.y - this->y * b.x};
     }
-
     inline float square() const { return this->dot(*this); }
-
     inline Vector3f normalize() {
         float inv_sqrt = Q_rsqrt(this->square());
         return *this * inv_sqrt;
     }
-
     inline float length() const { return std::sqrt(square()); }
-
     friend std::ostream &operator<<(std::ostream &os, const Vector3f &v) {
         os << "(" << v.x << ", " << v.y << ", " << v.z << ")";
         return os;
@@ -584,7 +554,6 @@ struct Vector4f {
     Vector4f(float x, float y, float z, float w): x(x), y(y), z(z), w(w){}
 
     inline Vector4f operator*(const float n) const { return {x * n, y * n, z * n, w * n}; }
-
     float dot(const Vector4f b) const { return x * b.x + y * b.y + z * b.z + w * b.w; }
     float square() const {return this->dot(*this);}
     Vector4f normalize() const {
@@ -616,7 +585,6 @@ struct Matrix {
         }
         return r;
     }
-
     constexpr static Matrix identity() {
         Matrix m{
             1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -624,7 +592,6 @@ struct Matrix {
 
         return m;
     }
-
     inline Matrix operator*(const Matrix &m) const {
         Matrix r;
         for (unsigned int i = 0; i < 4; i++) {
@@ -658,18 +625,14 @@ struct Matrix {
                  1.0};
         return m;
     }
-
     inline static Matrix rotate(Vector3f rotate) { return Matrix::rotate(rotate.x, rotate.y, rotate.z); }
-
     inline static Matrix translate(float x, float y, float z) {
         Matrix m{
             1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, y, 0.0, 0.0, 1.0, z, 0.0, 0.0, 0.0, 1.0,
         };
         return m;
     }
-
     inline static Matrix translate(Vector3f delta) { return Matrix::translate(delta.x, delta.y, delta.z); }
-
     inline static Matrix scale(float x, float y, float z) {
         Matrix m{
             x, 0.0, 0.0, 0.0, 0.0, y, 0.0, 0.0, 0.0, 0.0, z, 0.0, 0.0, 0.0, 0.0, 1.0,
@@ -677,7 +640,6 @@ struct Matrix {
 
         return m;
     }
-
     inline static Matrix scale(Vector3f scale) { return Matrix::scale(scale.x, scale.y, scale.z); }
 };
 
@@ -797,13 +759,9 @@ public:
     InputHandler() { clear_mouse_state(); }
 
     inline Vector2f get_mouse_position() const { return mouse_position; }
-
     inline Vector2f get_mouse_move() const { return mouse_delta; }
-
     inline bool is_left_button_down() const { return mouse_state & (1 << mouse_button_map(GLUT_LEFT_BUTTON)); }
-
     inline bool is_right_button_down() const { return mouse_state & (1 << mouse_button_map(GLUT_RIGHT_BUTTON)); }
-
     inline bool is_middle_button_down() const { return mouse_state & (1 << mouse_button_map(GLUT_MIDDLE_BUTTON)); }
 
 private:
@@ -816,13 +774,11 @@ private:
     // 这个需要每一帧清理
     friend void loop_func();
     void clear_mouse_move() { mouse_delta = Vector2f(0.0f, 0.0f); }
-
     void clear_mouse_state() {
         mouse_position = Vector2f(0.5f, 0.5f);
         mouse_delta = Vector2f(0.0f, 0.0f);
         mouse_state = 0;
     }
-
     static constexpr unsigned char mouse_button_map(int button) {
         switch (button) {
         case GLUT_LEFT_BUTTON:
@@ -1042,7 +998,6 @@ public:
     ResourceContainer<CubeMap> cubemaps;
 
     std::vector<std::function<void()>> deconstructors;
-
 
     void add_mesh(const std::string &key, const Vertex *vertices, size_t vertex_count, const uint16_t *const indices,
                   size_t indices_count) {
@@ -2004,24 +1959,6 @@ public:
             world.pointlights[1].enabled = true;
             world.is_light_dirty = true;
         }
-
-        // if (!is_middle_button_down && input.is_middle_button_down()) {
-        //     runtime->display.grab_mouse();
-        // }
-        // if (is_middle_button_down && !input.is_middle_button_down()) {
-        //     runtime->display.release_mouse();
-        // }
-
-        // if (input.is_right_button_down()) {
-        //     Vector3f point =
-        //         world.camera.position + world.get_screen_point_oritation(input.get_mouse_position()) * 10.0f;
-        //     PointLight& light = world.pointlights[0];
-        //     light.enabled = true;
-        //     light.position = point;
-        //     light.color = {1.0f, 1.0f, 1.0f};
-        //     light.factor = 1.0f;
-        //     world.is_light_dirty = true;
-        // }
 
         if (input.is_middle_button_down()) {
             auto [dx, dy] = input.get_mouse_move().v;
