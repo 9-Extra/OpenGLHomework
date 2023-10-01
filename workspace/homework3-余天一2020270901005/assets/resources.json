@@ -19,6 +19,7 @@
     },
     "texture": {
         "default_normal": {
+            "is_normal": true,
             "image": "textures/normal.jpg"
         },
         "white": {

@@ -1076,10 +1076,10 @@ public:
         materials.add(key, std::move(mat));
     }
 
-    void add_texture(const std::string &key, const std::string &image_path) {
+    void add_texture(const std::string &key, const std::string &image_path, bool is_normal=false) {
         std::cout << "Load texture: " << key << std::endl;
         
-        FIBITMAP* pImage = freeimage_load_and_convert_image(image_path);
+        FIBITMAP* pImage = freeimage_load_and_convert_image(image_path, is_normal);
 
         unsigned int nWidth = FreeImage_GetWidth(pImage);
         unsigned int nHeight = FreeImage_GetHeight(pImage);
@@ -1241,8 +1241,11 @@ public:
         }
 
         // 加载材质
-        auto get_texture_key = [&](size_t index) -> std::string {
-            return base_key + '.' + json["images"][json["textures"][index]["source"].get_uint()]["name"].get_string();
+        auto load_texture = [&](size_t index, bool is_normal=false) -> std::string {
+            const Json &texture = json["images"][index];
+            const std::string &key = base_key + '.' + texture["name"].get_string();
+            add_texture(key, root + texture["uri"].get_string(), is_normal);
+            return key;
         };
         if (json.has("materials")) {
             for (const Json &material : json["materials"].get_list()) {
@@ -1250,13 +1253,13 @@ public:
 
                 std::string normal_texture = "default_normal";
                 if (material.has("normalTexture")) {
-                    normal_texture = get_texture_key(material["normalTexture"]["index"].get_uint());
+                    normal_texture = load_texture(material["normalTexture"]["index"].get_uint(), true);
                 }
                 const std::string basecolor_texture =
-                    get_texture_key(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
+                    load_texture(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
                 std::string metallic_roughness_texture = "white";
                 if (material["pbrMetallicRoughness"].has("metallicRoughnessTexture")) {
-                    metallic_roughness_texture = get_texture_key(
+                    metallic_roughness_texture = load_texture(
                         material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
                 }
 
@@ -1297,7 +1300,8 @@ public:
 
         if (json.has("texture")) {
             for (const auto &[key, texture_desc] : json["texture"].get_map()) {
-                add_texture(key, base_dir + texture_desc["image"].get_string());
+                bool is_normal = texture_desc.has("is_normal") && texture_desc["is_normal"].get_bool();
+                add_texture(key, base_dir + texture_desc["image"].get_string(), is_normal);
             }
         }
 
@@ -1329,7 +1333,7 @@ public:
     }
 
 private:
-    static FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path){
+    static FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool is_normal=false){
         FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
         if (pImage_ori == nullptr) {
             std::cerr << "Failed to load image: " << image_path << std::endl;
@@ -1337,7 +1341,9 @@ private:
         }
         FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
         FreeImage_FlipVertical(pImage);
-        FreeImage_AdjustGamma(pImage, 1 / 2.2);
+        if (!is_normal){
+            FreeImage_AdjustGamma(pImage, 1 / 2.2);
+        }
         FreeImage_Unload(pImage_ori);
 
         return pImage;

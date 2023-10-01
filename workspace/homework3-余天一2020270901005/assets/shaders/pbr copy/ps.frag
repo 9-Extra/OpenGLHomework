@@ -40,6 +40,23 @@ out vec4 out_color; // 片段着色器输出的变量名可以任意命名，类
 
 #define PI 3.1415926
 
+vec3 ImportanceSampleGGX( vec2 Xi, float Roughness , vec3 N )
+{
+    float a = Roughness * Roughness;
+    float Phi = 2 * PI * Xi.x;
+    float CosTheta = sqrt( (1 - Xi.y) / ( 1 + (a*a - 1) * Xi.y ) );
+    float SinTheta = sqrt( 1 - CosTheta * CosTheta );
+    vec3 H;
+    H.x = SinTheta * cos( Phi );
+    H.y = SinTheta * sin( Phi );
+    H.z = CosTheta;
+    vec3 UpVector = abs(N.z) < 0.999 ? vec3(0,0,1) : vec3(1,0,0);
+    vec3 TangentX = normalize( cross( UpVector , N ) );
+    vec3 TangentY = cross( N, TangentX );
+    // Tangent to world space
+    return TangentX * H.x + TangentY * H.y + N * H.z;
+}
+
 float D_GGX(float dotNH, float roughness)
 {
     float alpha  = roughness * roughness;
@@ -136,7 +153,7 @@ vec3 pbr(vec3 viewer_pos, vec3 world_pos, vec3 light_pos, vec3 light_intensity, 
 vec3 caculate_normal(){
     const vec3 normal = normalize(vs_out.normal);
     const vec3 tangent = normalize(vs_out.tangent);
-    //在加载时进行了判断所有不需要考虑gamma矫正的问题
+    //需要反向gamma矫正以获取正确的数值
     vec3 texture_value = (texture(normal_texture, vs_out.tex_coords).xyz - 0.5) * 2;
     return tangent * texture_value.x + cross(normal, tangent) * texture_value.y + normal * texture_value.z;
 }
