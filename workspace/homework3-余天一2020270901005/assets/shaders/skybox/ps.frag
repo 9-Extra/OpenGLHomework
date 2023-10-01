@@ -1,6 +1,6 @@
 #version 440 core
 
-layout(binding = 5) uniform samplerCube skybox_color_texture;
+layout(binding = 5) uniform samplerCube skybox_specular_texture;
 
 in VS_OUT
 {
@@ -11,7 +11,7 @@ out vec4 out_color; // 片段着色器输出的变量名可以任意命名，类
 
 void main()
 {
-    vec3 result_color = texture(skybox_color_texture, fs_in.world_pos).xyz;
+    vec3 result_color = texture(skybox_specular_texture, fs_in.world_pos).xyz;
     //vec3 result_color = texture(skybox_color_texture, vec3(0, -1, 0)).xyz;
     //vec3 result_color = abs(fs_in.world_pos);
     //vec3 result_color = normalize(abs(vec3(0, 0, 1)));

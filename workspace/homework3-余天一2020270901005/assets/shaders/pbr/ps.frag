@@ -28,6 +28,8 @@ layout(binding = 0) uniform sampler2D basecolor_texture;
 layout(binding = 1) uniform sampler2D normal_texture;
 layout(binding = 2) uniform sampler2D metallic_roughness_texture;
 
+layout(binding = 5) uniform samplerCube skybox_specular_texture;
+
 in VS_OUT
 {
     vec3 normal;
@@ -113,26 +115,6 @@ vec3 BRDF(vec3  L,
     return color;
 }
 
-vec3 pbr(vec3 viewer_pos, vec3 world_pos, vec3 light_pos, vec3 light_intensity, vec3 basecolor, float metallic, float roughness, vec3 normal){
-    if (dot(normal, viewer_pos - world_pos) <= 0.0f || dot(normal, light_pos - world_pos) <= 0.0f){
-        //光照到背面或者相机在背面时返回0
-        return vec3(0.0f, 0.0f ,0.0f);
-    }
-
-    const float dielectric_specular = 0.04;//菲涅尔系数
-
-    // float cos_theta = dot(normal, normalize(viewer_pos - world_pos));//法线与观察角的cos
-
-    // vec3 term1 = (1 - metallic_factor) * basecolor / 3.1415926f;
-    // float F = F0 + (1 - F0) * (1 - cos_theta);
-    vec3 L = normalize(light_pos - world_pos);
-    vec3 V = normalize(viewer_pos - world_pos);
-    vec3 N = normal;
-    vec3 F0 = mix(vec3(dielectric_specular, dielectric_specular, dielectric_specular), basecolor, metallic);
-
-    return BRDF(L, V, N, F0, basecolor, metallic, roughness);
-}
-
 vec3 caculate_normal(){
     const vec3 normal = normalize(vs_out.normal);
     const vec3 tangent = normalize(vs_out.tangent);
@@ -143,25 +125,32 @@ vec3 caculate_normal(){
 
 void main()
 {
-    const vec3 normal = caculate_normal();
-    const vec3 basecolor = texture(basecolor_texture, vs_out.tex_coords).xyz;
+    const float dielectric_specular = 0.04;//菲涅尔系数
+    
+    const vec3 N = caculate_normal();//法线
+    const vec3 basecolor = texture(basecolor_texture, vs_out.tex_coords).xyz;//基础色
     const vec3 metallic_roughness = texture(metallic_roughness_texture, vs_out.tex_coords).xyz;
-    float metallic = metallic_roughness.x * metallic_factor;
-    float roughness = metallic_roughness.y * roughness_factor;
+    float metallic = metallic_roughness.x * metallic_factor;//金属度
+    float roughness = metallic_roughness.y * roughness_factor;//粗糙度
+    const vec3 F0 = mix(vec3(dielectric_specular), basecolor, metallic);
 
     vec3 result_color = ambient_light * basecolor;
     for(uint i = 0;i < pointlight_num;i++){
         vec3 light_pos = pointlight_list[i].position;
         vec3 light_intensity = pointlight_list[i].intensity;
 
-        vec3 light_vec = light_pos - vs_out.world_position;
-        vec3 oritation = normalize(light_vec);
+        vec3 L = normalize(light_pos - vs_out.world_position);
+        vec3 V = normalize(camera_position - vs_out.world_position);
 
-        vec3 result_light = light_intensity / dot(light_vec, light_vec) * max(dot(oritation, normal), 0.0f);
+        float squared_distance = dot(light_pos - vs_out.world_position, light_pos - vs_out.world_position);
+
+        vec3 result_light = light_intensity / squared_distance * max(dot(L, N), 0.0f);
         
-        result_color += result_light * pbr(camera_position, vs_out.world_position, light_pos, light_intensity, basecolor, metallic, roughness, normal);
+        result_color += result_light * BRDF(L, V, N, F0, basecolor, metallic, roughness);
         //result_color = light_intensity;
     }
+
+    result_color += 
 
     result_color = min(result_color, 1.0f);
 
@@ -169,11 +158,6 @@ void main()
     float distance = max(0.0f, length(vs_out.world_position - camera_position) - fog_min_distance);
     float fog_factor = exp(-distance * fog_density);
     result_color = mix(fog_color, result_color, fog_factor);
-    // if (pointlight_num == 0){
-    //     result_color = vec3(1.0f, 0.0f, 0.0f);
-    // } else if (pointlight_num == 1){
-    //     result_color = vec3(0.0f, 1.0f, 0.0f);
-    // }
 
     out_color = vec4(pow(result_color, vec3(1 / 2.2)), 1.0f);
     //out_color = vec4(max(normal,0), 1.0f);

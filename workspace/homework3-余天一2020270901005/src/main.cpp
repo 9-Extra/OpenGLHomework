@@ -857,6 +857,22 @@ unsigned int complie_shader_program(const std::string &vs_path, const std::strin
     return shaderProgram;
 }
 
+FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool is_normal=false){
+    FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
+    if (pImage_ori == nullptr) {
+        std::cerr << "Failed to load image: " << image_path << std::endl;
+        exit(-1);
+    }
+    FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
+    FreeImage_FlipVertical(pImage);
+    if (!is_normal){
+        FreeImage_AdjustGamma(pImage, 1 / 2.2);
+    }
+    FreeImage_Unload(pImage_ori);
+
+    return pImage;
+}
+
 struct Transform {
     Vector3f position;
     Vector3f rotation;
@@ -1232,21 +1248,15 @@ public:
                 add_mesh(key, vertices.data(), vertices.size(), indices_ptr, indices_count);
             }
         }
-        // 加载纹理
-        if (json.has("images")) {
-            for (const Json &texture : json["images"].get_list()) {
-                const std::string &key = base_key + '.' + texture["name"].get_string();
-                add_texture(key, root + texture["uri"].get_string());
-            }
-        }
-
-        // 加载材质
+        // 加载纹理（在加载材质时加载需要的纹理）
         auto load_texture = [&](size_t index, bool is_normal=false) -> std::string {
             const Json &texture = json["images"][index];
-            const std::string &key = base_key + '.' + texture["name"].get_string();
+            const std::string key = base_key + '.' + texture["name"].get_string();
             add_texture(key, root + texture["uri"].get_string(), is_normal);
             return key;
         };
+
+        // 加载材质
         if (json.has("materials")) {
             for (const Json &material : json["materials"].get_list()) {
                 const std::string &key = base_key + '.' + material["name"].get_string();
@@ -1330,23 +1340,6 @@ public:
             de();
         }
         deconstructors.clear();
-    }
-
-private:
-    static FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool is_normal=false){
-        FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
-        if (pImage_ori == nullptr) {
-            std::cerr << "Failed to load image: " << image_path << std::endl;
-            exit(-1);
-        }
-        FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
-        FreeImage_FlipVertical(pImage);
-        if (!is_normal){
-            FreeImage_AdjustGamma(pImage, 1 / 2.2);
-        }
-        FreeImage_Unload(pImage_ori);
-
-        return pImage;
     }
 } resources;
 
@@ -1888,6 +1881,7 @@ void World::render_skybox() {
     glUseProgram(skybox.shader_program_id);
     glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
     glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.color_texture_id);
+        
     const Mesh &mesh = resources.meshes.get(skybox.mesh_id);
 
     glBindVertexArray(mesh.VAO_id);
