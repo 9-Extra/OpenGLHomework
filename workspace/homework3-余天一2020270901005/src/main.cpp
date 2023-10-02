@@ -1346,7 +1346,7 @@ public:
 struct GameObjectPart {
     uint32_t mesh_id;
     uint32_t material_id;
-    uint32_t topology = GL_TRIANGLES;
+    uint32_t topology;
     Matrix model_matrix;
     Matrix normal_matrix;
 
