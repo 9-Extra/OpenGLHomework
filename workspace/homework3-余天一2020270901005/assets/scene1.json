@@ -2,8 +2,9 @@
     "skybox": {
         "specular_texture": "skybox_valley_color"
     },
-    "objects": [
+    "root": [
         {
+            "name": "球",
             "transform": {
                 "position": [
                     0.0,
@@ -26,6 +27,35 @@
                     "transform": {},
                     "mesh": "wood_floor.Sphere",
                     "material": "wood_floor.wood_floor_deck"
+                }
+            ],
+            "children": [
+                {
+                    "name": "子球",
+                    "transform": {
+                        "position": [
+                            0.0,
+                            10.0,
+                            -10.0
+                        ],
+                        "rotation": [
+                            0.0,
+                            0.0,
+                            0.0
+                        ],
+                        "scale": [
+                            3.0,
+                            3.0,
+                            3.0
+                        ]
+                    },
+                    "parts": [
+                        {
+                            "transform": {},
+                            "mesh": "wood_floor.Sphere",
+                            "material": "wood_floor.wood_floor_deck"
+                        }
+                    ]
                 }
             ]
         },

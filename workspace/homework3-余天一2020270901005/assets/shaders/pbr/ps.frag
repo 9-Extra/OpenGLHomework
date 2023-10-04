@@ -109,9 +109,7 @@ vec3 BRDF(vec3  L,
     vec3 kD   = (vec3(1.0) - F) * (1.0 - metallic);
 
     color += (kD * basecolor / PI + (1.0 - kD) * spec);
-    // color += (kD * basecolor / PI + spec) * dotNL;
-    // color += (kD * basecolor / PI + spec) * dotNL * lightColor;
-
+    
     return color;
 }
 
@@ -149,8 +147,6 @@ void main()
         result_color += result_light * BRDF(L, V, N, F0, basecolor, metallic, roughness);
         //result_color = light_intensity;
     }
-
-    result_color += 
 
     result_color = min(result_color, 1.0f);
 

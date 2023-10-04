@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <algorithm>
 
 #define NOGDICAPMASKS
 #define NOSYSMETRICS
@@ -86,7 +87,7 @@ std::string read_whole_file(const std::string& path) {
 }
 
 namespace SimpleJson {
-// 极简json解析库，并没有完全实现json的所有解析功能，任何格式错误都可能导致死循环或者崩溃
+// 极简json解析库，任何格式错误都可能导致死循环或者崩溃
 struct json_null {};
 
 enum JsonType { Null = 0, Bool = 1, Number = 2, String = 3, List = 4, Map = 5 };
@@ -98,31 +99,21 @@ public:
         inner;
 
     JsonObject() : inner(std::make_unique<decltype(inner)::element_type>()) {}
+
     JsonType get_type() const { return (JsonType)inner->index(); }
-
     const JsonObject &operator[](size_t i) const { return std::get<List>(*inner)[i]; }
-
     const JsonObject &operator[](const std::string &key) const { return std::get<JsonType::Map>(*inner).at(key); }
-
     bool has(const std::string &key) const {
         const std::unordered_map<std::string, JsonObject> &m = std::get<JsonType::Map>(*inner);
         return m.find(key) != m.end();
     }
-
     bool is_null() const { return inner->index() == Null; }
-
     const std::vector<JsonObject> &get_list() const { return std::get<List>(*inner); }
-
     const std::unordered_map<std::string, JsonObject> &get_map() const { return std::get<JsonType::Map>(*inner); }
-
     const std::string &get_string() const { return std::get<JsonType::String>(*inner); }
-
     double get_number() const { return std::get<JsonType::Number>(*inner); }
-
     uint64_t get_uint() const { return (uint64_t)get_number(); }
-
     int64_t get_int() const { return (int64_t)get_number(); }
-
     bool get_bool() const { return std::get<JsonType::Bool>(*inner); }
 
     friend std::ostream &operator<<(std::ostream &os, const JsonObject &json) {
@@ -446,8 +437,7 @@ inline JsonObject parse(const std::string &json_str) {
     }
 
     Impl::skip_empty(&start);
-
-    assert(*start == '\0');
+    assert(*start == '\0');//检查是否解析到了文件结束
 
     return obj;
 }
@@ -1039,10 +1029,10 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(uint16_t), indices, GL_STATIC_DRAW);
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)sizeof(Vertex::position));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vertex::position) + sizeof(Vertex::normal)));
-        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)(sizeof(Vertex::position) + sizeof(Vertex::normal) + sizeof(Vertex::tangent)));
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tangent));
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
@@ -1357,6 +1347,7 @@ struct GameObjectPart {
           topology(topology), model_matrix(transform.transform_matrix()), normal_matrix(transform.normal_matrix()) {}
 
 private:
+    friend class World;
     friend class GObject;
     Matrix base_transform;
     Matrix base_normal_matrix;
@@ -1367,29 +1358,19 @@ struct GObjectDesc {
     std::vector<GameObjectPart> parts;
 };
 
-class GObject : public std::enable_shared_from_this<GObject> {
+class GObject final : public std::enable_shared_from_this<GObject> {
 public:
+    std::string name;
     Transform transform;
 
     Matrix relate_model_matrix;
+    Matrix relate_normal_matrix;
     bool is_relat_dirty = true;
 
-    GObject(){};
-    GObject(GObjectDesc &&desc) : transform(desc.transform), parts(std::move(desc.parts)){};
+    GObject(const std::string name=""): name(name){};
+    GObject(GObjectDesc &&desc, const std::string name="") : name(name), transform(desc.transform), parts(std::move(desc.parts)){};
 
-    // 可以重载
-    virtual void tick() {
-        if (is_relat_dirty) {
-            relate_model_matrix = transform.transform_matrix();
-            for (GameObjectPart &p : parts) {
-                p.base_transform = relate_model_matrix * p.model_matrix;
-                p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
-            }
-            is_relat_dirty = false;
-        }
-    };
-
-    virtual void render();
+    void render() const;
 
     void add_part(const GameObjectPart &part) {
         GameObjectPart &p = parts.emplace_back(part);
@@ -1397,11 +1378,68 @@ public:
         p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
     }
 
-    virtual ~GObject() = default;
+    ~GObject() {
+        assert(!parent.lock());//必须没有父节点
+    };
+
+    void set_transform(const Transform &transform) {
+        this->transform = transform;
+        is_relat_dirty = true;
+    }
+
+    const std::vector<std::shared_ptr<GObject>>& get_children() const{
+        return children;
+    }
+    std::shared_ptr<GObject> get_child_by_name(const std::string name){
+        if (name.empty()) return nullptr;
+        for (auto &child : children) {
+            if (child->name == name) {
+                return child;
+            }
+        }
+        return nullptr;
+    }
+
+    void attach_child(std::shared_ptr<GObject> child) {
+        children.push_back(child);
+        child->parent = weak_from_this();
+    }
+
+    void remove_child(GObject* child) {
+        auto it = std::find_if(children.begin(), children.end(), [child](const auto& c) -> bool {
+            return c.get() == child;
+        });
+        if (it!= children.end()) {
+            (*it)->parent.reset();
+            children.erase(it);
+        } else {
+            assert(false);//试图移除不存在的子节点
+        }
+    }
+
+    bool has_parent() const {
+        return !parent.expired();
+    }
+
+    std::weak_ptr<GObject> get_parent(){
+        return parent;
+    }
+
+    void attach_parent(GObject* new_parent){
+        if (new_parent == parent.lock().get()) return;
+        if (auto old_parent = parent.lock();old_parent){
+            old_parent->remove_child(this);
+        }
+        if (new_parent != nullptr) {
+            new_parent->attach_child(shared_from_this());
+        }
+    }
 
 private:
     friend class World;
     std::vector<GameObjectPart> parts;
+    std::weak_ptr<GObject> parent;
+    std::vector<std::shared_ptr<GObject>> children;
 };
 
 struct Camera {
@@ -1461,6 +1499,7 @@ public:
     ISystem(const std::string &name, bool enable = true) : enable(enable), name(name) {}
     const std::string &get_name() const { return name; }
 
+    virtual void on_attach() {};
     virtual void tick() = 0;
 
     virtual ~ISystem() = default;
@@ -1483,26 +1522,18 @@ public:
     float fog_min_distance = 5.0f;
     float fog_density = 0.001f;
 
-    template <class T = GObject, class... ARGS> std::shared_ptr<T> create_object(ARGS &&...args) {
-        std::shared_ptr<T> g_object = std::make_shared<T>(std::forward<ARGS>(args)...);
-        assert(dynamic_cast<GObject *>(g_object.get()));
-        objects.emplace(g_object.get(), g_object);
-        return g_object;
+    World(){
+        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f ,1.0f}}, {}}, "root");
     }
 
-    void register_object(std::shared_ptr<GObject> g_object) {
-        assert(objects.find(g_object.get()) == objects.end()); // 不可重复添加
-        objects.emplace(g_object.get(), g_object);
+    std::shared_ptr<GObject> get_root(){
+        return root;
     }
-
-    void kill_object(std::shared_ptr<GObject> g_object) {
-        size_t i = objects.erase(g_object.get());
-        assert(i != 0); // 试图删除不存在的object
-    }
-
+    
     void register_system(ISystem *system) {
         assert(system != nullptr && systems.find(system->get_name()) == systems.end());
         systems.emplace(system->get_name(), system);
+        system->on_attach();
     }
 
     void set_skybox(const std::string &color_cubemap_key) {
@@ -1514,7 +1545,8 @@ public:
     ISystem *get_system(const std::string &name) { return systems.at(name).get(); }
 
     void remove_system(const std::string &name) { systems.erase(name); }
-
+    
+    void walk_gobject(GObject *root, uint32_t dirty_flags);
     void tick();
 
     void render_skybox();
@@ -1536,7 +1568,7 @@ public:
     }
 
 private:
-    std::unordered_map<GObject *, std::shared_ptr<GObject>> objects;
+    std::shared_ptr<GObject> root;
     std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
     SkyBox skybox;
 };
@@ -1649,8 +1681,8 @@ void setup_opengl() {
     checkError();
 }
 
-// render的默认实现
-void GObject::render() {
+// render
+void GObject::render() const{
     {
         for (const GameObjectPart &p : parts) {
             auto data = render_info.per_object_uniform.map();
@@ -1806,6 +1838,20 @@ Transform load_transform(const SimpleJson::JsonObject &json) {
     return trans;
 }
 
+void load_node_from_json(const SimpleJson::JsonObject &node, GObject* root){
+    for (const SimpleJson::JsonObject &object_desc : node.get_list()) {
+        GObjectDesc desc{load_transform(object_desc), {}};
+        for (const SimpleJson::JsonObject &part_desc : object_desc["parts"].get_list()) {
+            desc.parts.emplace_back(part_desc["mesh"].get_string(), part_desc["material"].get_string());
+        }
+        const std::string& name = object_desc.has("name") ? object_desc["name"].get_string() : "";
+        root->attach_child(std::make_shared<GObject>(std::move(desc), name));
+        if (object_desc.has("children")) {
+            load_node_from_json(object_desc["children"], root->get_children().back().get());
+        }
+    }
+}
+
 void load_scene_from_json(const std::string &path) {
     SimpleJson::JsonObject json = SimpleJson::parse_file(path);
     // 加载天空盒
@@ -1816,15 +1862,8 @@ void load_scene_from_json(const std::string &path) {
 
     world.set_skybox(json["skybox"]["specular_texture"].get_string());
     // 加载物体
-    if (json.has("objects")) {
-        for (const SimpleJson::JsonObject &object_desc : json["objects"].get_list()) {
-            GObjectDesc desc{load_transform(object_desc), {}};
-            for (const SimpleJson::JsonObject &part_desc : object_desc["parts"].get_list()) {
-                desc.parts.emplace_back(part_desc["mesh"].get_string(), part_desc["material"].get_string());
-            }
-
-            world.create_object<GObject>(std::move(desc));
-        }
+    if (json.has("root")) {
+        load_node_from_json(json["root"], world.get_root().get());
     }
     // 加载点光源
     if (json.has("pointlights")) {
@@ -1840,7 +1879,7 @@ void load_scene_from_json(const std::string &path) {
 }
 void init_start_scene() { load_scene_from_json("assets/scene1.json"); }
 
-inline unsigned int calculate_fps(float delta_time) {
+unsigned int calculate_fps(float delta_time) {
     const float ratio = 0.1f;
     static float avarage_frame_time = std::nan("");
 
@@ -1853,6 +1892,29 @@ inline unsigned int calculate_fps(float delta_time) {
     return (unsigned int)(1000.0f / avarage_frame_time);
 }
 
+void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
+    dirty_flags |= root->is_relat_dirty;
+    if (dirty_flags) {
+        if (root->has_parent()){
+            root->relate_model_matrix = root->get_parent().lock()->relate_model_matrix * root->transform.transform_matrix();
+            root->relate_normal_matrix = root->get_parent().lock()->relate_normal_matrix * root->transform.normal_matrix();
+        } else {
+            root->relate_model_matrix = root->transform.transform_matrix();
+            root->relate_normal_matrix = root->transform.normal_matrix();
+        }
+
+        for (GameObjectPart &p : root->parts) {
+            p.base_transform = root->relate_model_matrix * p.model_matrix;
+            p.base_normal_matrix = root->relate_normal_matrix * p.normal_matrix;
+        }
+        root->is_relat_dirty = false;
+    }
+
+    for(auto& child: root->children){
+        walk_gobject(child.get(), dirty_flags);
+    }
+}
+
 void World::tick() {
     render_info.tick_count++;
     clock.update();
@@ -1863,9 +1925,7 @@ void World::tick() {
         }
     }
 
-    for (auto &[ptr, obj] : objects) {
-        obj->tick();
-    }
+    walk_gobject(this->root.get(), 0);
 }
 
 #define SKYBOX_COLOR_BINDING 5
@@ -1887,6 +1947,13 @@ void World::render_skybox() {
     glBindVertexArray(mesh.VAO_id);
     glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
     checkError();
+}
+
+void render_walk_gobject(const GObject* root){
+    root->render();
+    for (auto &child : root->get_children()) {
+        render_walk_gobject(child.get());
+    }
 }
 
 void World::render() {
@@ -1923,9 +1990,7 @@ void World::render() {
 
     render_info.per_frame_uniform.unmap();
 
-    for (auto &[ptr, obj] : objects) {
-        obj->render();
-    }
+    render_walk_gobject(world.get_root().get());
 
     render_skybox();
 
@@ -2030,23 +2095,35 @@ public:
         }
     }
 
+    void on_attach() override {
+        ball = world.get_root()->get_child_by_name("球");
+    }
+
     void tick() override {
         handle_keyboard(world.clock.get_delta());
         handle_mouse();
 
+        ball->transform.rotation.x += world.clock.get_delta() * 0.001f;
+        ball->transform.rotation.y += world.clock.get_delta() * 0.003f;
+        ball->is_relat_dirty = true;
         world.pointlights[0].position.x = 20.0f * sinf(render_info.tick_count * 0.01f);
         world.is_light_dirty = true;
     }
+private:
+    std::shared_ptr<GObject> ball;
 };
+
+#define INIT_WINDOW_WIDTH 1080
+#define INIT_WINDOW_HEIGHT 720
 
 int main(int argc, char **argv) {
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
-    glutInitWindowPosition(50, 100);
-    glutInitWindowSize(1080, 720);
+    glutInitWindowPosition(100, 100);
+    glutInitWindowSize(INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
     glutCreateWindow(MY_TITLE);
 
-    set_viewport(0, 0, 1080, 720);
+    set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
 
     glutIdleFunc(loop_func);
     glutDisplayFunc([]() {});
