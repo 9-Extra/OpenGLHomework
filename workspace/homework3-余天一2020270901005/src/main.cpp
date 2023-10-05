@@ -1,5 +1,6 @@
 #include <GL/glew.h>
 #include <GL/glut.h>
+#include <algorithm>
 #include <array>
 #include <assert.h>
 #include <chrono>
@@ -11,7 +12,7 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
-#include <algorithm>
+
 
 #define NOGDICAPMASKS
 #define NOSYSMETRICS
@@ -51,11 +52,11 @@
 #include <Windows.h>
 #include <FreeImage.h>
 
-//Mingw的ifstream不知道为什么导致了崩溃，手动实现文件读取
-std::string read_whole_file(const std::string& path) {
-    HANDLE handle =
-        CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
-                    FILE_ATTRIBUTE_READONLY | FILE_FLAG_SEQUENTIAL_SCAN , NULL);
+
+// Mingw的ifstream不知道为什么导致了崩溃，手动实现文件读取
+std::string read_whole_file(const std::string &path) {
+    HANDLE handle = CreateFileA(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                                FILE_ATTRIBUTE_READONLY | FILE_FLAG_SEQUENTIAL_SCAN, NULL);
     if (handle == INVALID_HANDLE_VALUE) {
         std::cerr << "Failed to open file: " << path << std::endl;
         exit(-1);
@@ -178,49 +179,49 @@ inline void match_and_skip(const char **const start, const char *str) {
     }
 }
 
-inline char from_hex(char c){
+inline char from_hex(char c) {
     switch (c) {
-        case '0':
-        case '1':
-        case '2':
-        case '3':
-        case '4':
-        case '5':
-        case '6':
-        case '7':
-        case '8':
-        case '9':{
-            return c - '0';
-        }
-        case 'a':
-        case 'A':{
-            return 0xa;
-        }
-        case 'b':
-        case 'B':{
-            return 0xb;
-        }
-        case 'c':
-        case 'C':{
-            return 0xc;
-        }
-        case 'd':
-        case 'D':{
-            return 0xd;
-        }
-        case 'e':
-        case 'E':{
-            return 0xe;
-        }
-        case 'f':
-        case 'F':{
-            return 0xf;
-        }
+    case '0':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9': {
+        return c - '0';
+    }
+    case 'a':
+    case 'A': {
+        return 0xa;
+    }
+    case 'b':
+    case 'B': {
+        return 0xb;
+    }
+    case 'c':
+    case 'C': {
+        return 0xc;
+    }
+    case 'd':
+    case 'D': {
+        return 0xd;
+    }
+    case 'e':
+    case 'E': {
+        return 0xe;
+    }
+    case 'f':
+    case 'F': {
+        return 0xf;
+    }
 
-        default: {
-            assert(false);//错啦
-            return 0;
-        }
+    default: {
+        assert(false); // 错啦
+        return 0;
+    }
     }
 }
 
@@ -230,47 +231,47 @@ inline std::string parse_string(const char **const start) {
     (*start)++;
     for (; **start != '\"'; (*start)++) {
         // 转义字符特殊处理
-        if (**start == '\\'){
+        if (**start == '\\') {
             (*start)++;
             switch (**start) {
-                case '\"': {
-                    str.push_back('\"');
-                    break;
-                }
-                case '\\': {
-                    str.push_back('\\');
-                    break;
-                }
-                
-                case 'n': {
-                    str.push_back('\n');
-                    break;
-                }
-                case 'r': {
-                    str.push_back('\r');
-                    break;
-                }
-                case 't': {
-                    str.push_back('\t');
-                    break;
-                }
-                case 'f': {
-                    str.push_back('\f');
-                    break;
-                }
-                case 'b': {
-                    str.push_back('\b');
-                    break;
-                }
-                case 'u': {
-                    char c1 = (from_hex(*(*start + 1)) << 4) + from_hex(*(*start + 2));
-                    *start += 2;
-                    char c2 = (from_hex(*(*start + 1)) << 4) + from_hex(*(*start + 2));
-                    *start += 2;
-                    str.push_back(c1);
-                    str.push_back(c2);
-                    break;
-                }
+            case '\"': {
+                str.push_back('\"');
+                break;
+            }
+            case '\\': {
+                str.push_back('\\');
+                break;
+            }
+
+            case 'n': {
+                str.push_back('\n');
+                break;
+            }
+            case 'r': {
+                str.push_back('\r');
+                break;
+            }
+            case 't': {
+                str.push_back('\t');
+                break;
+            }
+            case 'f': {
+                str.push_back('\f');
+                break;
+            }
+            case 'b': {
+                str.push_back('\b');
+                break;
+            }
+            case 'u': {
+                char c1 = (from_hex(*(*start + 1)) << 4) + from_hex(*(*start + 2));
+                *start += 2;
+                char c2 = (from_hex(*(*start + 1)) << 4) + from_hex(*(*start + 2));
+                *start += 2;
+                str.push_back(c1);
+                str.push_back(c2);
+                break;
+            }
             }
         } else {
             str.push_back(**start);
@@ -283,20 +284,20 @@ inline std::string parse_string(const char **const start) {
 inline bool is_number(char c) { return c <= '9' && c >= '0'; }
 inline double parse_number(const char **const start) {
     assert(is_number(**start) || **start == '.' || **start == '-');
-    //解析符号
+    // 解析符号
     bool positive = true;
     if (**start == '-') {
         positive = false;
         (*start)++;
     }
-    //解析整数
+    // 解析整数
     uint64_t base_num = 0;
     int exp_num = 0;
     for (; is_number(**start); (*start)++) {
         base_num *= 10;
         base_num += (**start - '0');
     }
-    //解析小数
+    // 解析小数
     if (**start == '.') {
         (*start)++;
         for (; is_number(**start); (*start)++) {
@@ -305,13 +306,14 @@ inline double parse_number(const char **const start) {
             exp_num--;
         }
     }
-    //解析指数
+    // 解析指数
     size_t given_exp = 0;
     int exp_sign = 1;
-    if (**start == 'E' || **start == 'e'){
+    if (**start == 'E' || **start == 'e') {
         (*start)++;
-        if (**start == '-' || **start == '+'){
-            if (**start == '-') exp_sign = -1;
+        if (**start == '-' || **start == '+') {
+            if (**start == '-')
+                exp_sign = -1;
             (*start)++;
         }
         for (; is_number(**start); (*start)++) {
@@ -321,7 +323,7 @@ inline double parse_number(const char **const start) {
     }
 
     exp_num += exp_sign * given_exp;
-    double num = base_num * std::pow<double>(10, exp_num); 
+    double num = base_num * std::pow<double>(10, exp_num);
     return positive ? num : -num;
 }
 
@@ -437,7 +439,7 @@ inline JsonObject parse(const std::string &json_str) {
     }
 
     Impl::skip_empty(&start);
-    assert(*start == '\0');//检查是否解析到了文件结束
+    assert(*start == '\0'); // 检查是否解析到了文件结束
 
     return obj;
 }
@@ -447,9 +449,7 @@ inline JsonObject parse_stream(std::istream &stream) {
     return parse(str);
 }
 
-inline JsonObject parse_file(const std::string &path) {    
-    return parse(read_whole_file(path));
-}
+inline JsonObject parse_file(const std::string &path) { return parse(read_whole_file(path)); }
 } // namespace SimpleJson
 
 static float Q_rsqrt(float number) {
@@ -540,26 +540,26 @@ struct Vector4f {
         float v[4];
     };
 
-    Vector4f(){}
-    constexpr Vector4f(float x, float y, float z, float w): x(x), y(y), z(z), w(w){}
+    Vector4f() {}
+    constexpr Vector4f(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
 
     inline Vector4f operator*(const float n) const { return {x * n, y * n, z * n, w * n}; }
     float dot(const Vector4f b) const { return x * b.x + y * b.y + z * b.z + w * b.w; }
-    float square() const {return this->dot(*this);}
+    float square() const { return this->dot(*this); }
     Vector4f normalize() const {
         float inv_sqrt = Q_rsqrt(this->square());
         return *this * inv_sqrt;
     }
 
     friend std::ostream &operator<<(std::ostream &os, const Vector4f &v) {
-        os << "(" << v.x << ", " << v.y << ", " << v.z  << ", " << v.w << ")";
+        os << "(" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ")";
         return os;
     }
 };
 struct Matrix {
     float m[4][4];
 
-    constexpr Matrix(): m{{0,0,0,0},{0,0,0,0},{0,0,0,0},{0,0,0,0}} {}
+    constexpr Matrix() : m{{0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}, {0, 0, 0, 0}} {}
     constexpr Matrix(float m00, float m01, float m02, float m03, float m10, float m11, float m12, float m13, float m20,
                      float m21, float m22, float m23, float m30, float m31, float m32, float m33)
         : m{{m00, m01, m02, m03}, {m10, m11, m12, m13}, {m20, m21, m22, m23}, {m30, m31, m32, m33}} {}
@@ -716,7 +716,7 @@ struct Quaternion {
     }
 };
 
-inline void _check_error(const std::string& file, size_t line) {
+inline void _check_error(const std::string &file, size_t line) {
     GLenum error;
     while ((error = glGetError()) != GL_NO_ERROR) {
         std::cerr << "GL error 0x" << error << ": " << gluErrorString(error) << std::endl;
@@ -740,8 +740,9 @@ public:
         now = std::chrono::steady_clock::now();
     }
 
-    float get_delta() const { return delta; }
-    float get_current_delta() const {
+    float get_delta() const { return delta; } // 返回该帧相对上一帧过去的以float表示的毫秒数
+    float get_current_delta() const // 获得调用此函数的时间相对上一帧过去的以float表示的毫秒数
+    {
         using namespace std::chrono;
         return duration_cast<duration<float, std::milli>>(steady_clock::now() - now).count();
     }
@@ -850,16 +851,16 @@ unsigned int complie_shader_program(const std::string &vs_path, const std::strin
     return shaderProgram;
 }
 
-//加载图像并预先进行反向gamma矫正
-FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool is_normal=false){
+// 加载图像并预先进行反向gamma矫正
+FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path, bool is_normal = false) {
     FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
     if (pImage_ori == nullptr) {
         std::cerr << "Failed to load image: " << image_path << std::endl;
         exit(-1);
     }
     FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
-    FreeImage_FlipVertical(pImage);//翻转，适应opengl的方向
-    if (!is_normal){
+    FreeImage_FlipVertical(pImage); // 翻转，适应opengl的方向
+    if (!is_normal) {
         FreeImage_AdjustGamma(pImage, 1 / 2.2);
     }
     FreeImage_Unload(pImage_ori);
@@ -867,7 +868,7 @@ FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool i
     return pImage;
 }
 
-//平移旋转缩放
+// 平移旋转缩放
 struct Transform {
     Vector3f position;
     Vector3f rotation;
@@ -949,11 +950,13 @@ struct Material {
     std::vector<SampleData> samplers;
 
     void bind() const {
-        glUseProgram(shaderprogram_id);
+        glUseProgram(shaderprogram_id); // 绑定此材质关联的着色器
 
+        // 绑定材质的uniform buffer
         for (const UniformData &u : uniforms) {
             glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
         }
+        // 绑定所有纹理
         for (const SampleData &s : samplers) {
             glActiveTexture(GL_TEXTURE0 + s.binding_id);
             glBindTexture(GL_TEXTURE_2D, s.texture_id);
@@ -965,23 +968,23 @@ struct Shader {
     unsigned int program_id;
 };
 
-//资源管理器
+// 资源管理器
 class RenderReousce final {
 public:
     template <class T> class ResourceContainer {
     public:
         uint32_t find(const std::string &key) const {
 #ifndef NDEBUG
-            if (look_up.find(key) == look_up.end()){
+            if (look_up.find(key) == look_up.end()) {
                 std::cerr << "Unknown key: " << key << std::endl;
-                exit(-1);    
+                exit(-1);
             }
 #endif
-            return look_up.at(key); 
+            return look_up.at(key);
         }
 
         void add(const std::string &key, T &&item) {
-            if (auto it = look_up.find(key);it != look_up.end()){
+            if (auto it = look_up.find(key); it != look_up.end()) {
                 std::cout << "Add duplicated key: " << key << std::endl;
                 uint32_t id = it->second;
                 container[id] = std::move(item);
@@ -1028,10 +1031,10 @@ public:
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(uint16_t), indices, GL_STATIC_DRAW);
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, tangent));
-        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, uv));
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, normal));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, tangent));
+        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
@@ -1081,10 +1084,10 @@ public:
         materials.add(key, std::move(mat));
     }
 
-    void add_texture(const std::string &key, const std::string &image_path, bool is_normal=false) {
+    void add_texture(const std::string &key, const std::string &image_path, bool is_normal = false) {
         std::cout << "Load texture: " << key << std::endl;
-        
-        FIBITMAP* pImage = freeimage_load_and_convert_image(image_path, is_normal);
+
+        FIBITMAP *pImage = freeimage_load_and_convert_image(image_path, is_normal);
 
         unsigned int nWidth = FreeImage_GetWidth(pImage);
         unsigned int nHeight = FreeImage_GetHeight(pImage);
@@ -1136,7 +1139,7 @@ public:
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
         for (unsigned int i = 0; i < textures_faces.size(); i++) {
-            FIBITMAP* pImage = freeimage_load_and_convert_image(*textures_faces[i]);
+            FIBITMAP *pImage = freeimage_load_and_convert_image(*textures_faces[i]);
 
             unsigned int nWidth = FreeImage_GetWidth(pImage);
             unsigned int nHeight = FreeImage_GetHeight(pImage);
@@ -1185,8 +1188,8 @@ public:
             for (const Json &buffer : json["buffers"].get_list()) {
                 std::string bin_path = root + buffer["uri"].get_string();
                 Buffer &b = buffers.emplace_back((size_t)buffer["byteLength"].get_number());
-                FILE* read;
-                if (fopen_s(&read, bin_path.c_str(), "rb") != 0){
+                FILE *read;
+                if (fopen_s(&read, bin_path.c_str(), "rb") != 0) {
                     std::cerr << "Falied to read file: " << bin_path << std::endl;
                     exit(-1);
                 }
@@ -1224,12 +1227,12 @@ public:
                                                 normal_buffer["byteOffset"].get_uint());
                 Vector2f *uv = (Vector2f *)((char *)buffers[uv_buffer["buffer"].get_uint()].ptr +
                                             uv_buffer["byteOffset"].get_uint());
-                Vector4f *tangent = (Vector4f*)((char *)buffers[tangent_buffer["buffer"].get_uint()].ptr +
-                                            tangent_buffer["byteOffset"].get_uint());
+                Vector4f *tangent = (Vector4f *)((char *)buffers[tangent_buffer["buffer"].get_uint()].ptr +
+                                                 tangent_buffer["byteOffset"].get_uint());
 
                 std::vector<Vertex> vertices(vertex_count);
                 for (uint32_t i = 0; i < vertex_count; i++) {
-                    //tangent的第四个分量是用来根据平台决定手性的，在opengl中始终应该取1
+                    // tangent的第四个分量是用来根据平台决定手性的，在opengl中始终应该取1
                     Vector3f tang = Vector3f(tangent[i].x, tangent[i].y, tangent[i].z);
                     vertices[i] = {pos[i], normal[i], tang, uv[i]};
                 }
@@ -1238,7 +1241,7 @@ public:
             }
         }
         // 加载纹理（在加载材质时加载需要的纹理）
-        auto load_texture = [&](size_t index, bool is_normal=false) -> std::string {
+        auto load_texture = [&](size_t index, bool is_normal = false) -> std::string {
             const Json &texture = json["images"][index];
             const std::string key = base_key + '.' + texture["name"].get_string();
             add_texture(key, root + texture["uri"].get_string(), is_normal);
@@ -1258,8 +1261,8 @@ public:
                     load_texture(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
                 std::string metallic_roughness_texture = "white";
                 if (material["pbrMetallicRoughness"].has("metallicRoughnessTexture")) {
-                    metallic_roughness_texture = load_texture(
-                        material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
+                    metallic_roughness_texture =
+                        load_texture(material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
                 }
 
                 float metallicFactor = 1.0f;
@@ -1366,8 +1369,9 @@ public:
     Matrix relate_normal_matrix;
     bool is_relat_dirty = true;
 
-    GObject(const std::string name=""): name(name){};
-    GObject(GObjectDesc &&desc, const std::string name="") : name(name), transform(desc.transform), parts(std::move(desc.parts)){};
+    GObject(const std::string name = "") : name(name){};
+    GObject(GObjectDesc &&desc, const std::string name = "")
+        : name(name), transform(desc.transform), parts(std::move(desc.parts)){};
 
     void render() const;
 
@@ -1378,7 +1382,7 @@ public:
     }
 
     ~GObject() {
-        assert(!parent.lock());//必须没有父节点
+        assert(!parent.lock()); // 必须没有父节点
     };
 
     void set_transform(const Transform &transform) {
@@ -1386,11 +1390,10 @@ public:
         is_relat_dirty = true;
     }
 
-    const std::vector<std::shared_ptr<GObject>>& get_children() const{
-        return children;
-    }
-    std::shared_ptr<GObject> get_child_by_name(const std::string name){
-        if (name.empty()) return nullptr;
+    const std::vector<std::shared_ptr<GObject>> &get_children() const { return children; }
+    std::shared_ptr<GObject> get_child_by_name(const std::string name) {
+        if (name.empty())
+            return nullptr;
         for (auto &child : children) {
             if (child->name == name) {
                 return child;
@@ -1404,29 +1407,25 @@ public:
         child->parent = weak_from_this();
     }
 
-    void remove_child(GObject* child) {
-        auto it = std::find_if(children.begin(), children.end(), [child](const auto& c) -> bool {
-            return c.get() == child;
-        });
-        if (it!= children.end()) {
+    void remove_child(GObject *child) {
+        auto it =
+            std::find_if(children.begin(), children.end(), [child](const auto &c) -> bool { return c.get() == child; });
+        if (it != children.end()) {
             (*it)->parent.reset();
             children.erase(it);
         } else {
-            assert(false);//试图移除不存在的子节点
+            assert(false); // 试图移除不存在的子节点
         }
     }
 
-    bool has_parent() const {
-        return !parent.expired();
-    }
+    bool has_parent() const { return !parent.expired(); }
 
-    std::weak_ptr<GObject> get_parent(){
-        return parent;
-    }
+    std::weak_ptr<GObject> get_parent() { return parent; }
 
-    void attach_parent(GObject* new_parent){
-        if (new_parent == parent.lock().get()) return;
-        if (auto old_parent = parent.lock();old_parent){
+    void attach_parent(GObject *new_parent) {
+        if (new_parent == parent.lock().get())
+            return;
+        if (auto old_parent = parent.lock(); old_parent) {
             old_parent->remove_child(this);
         }
         if (new_parent != nullptr) {
@@ -1474,12 +1473,12 @@ public:
         return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
     }
 
-    //用于一般物体的变换矩阵
+    // 用于一般物体的变换矩阵
     Matrix get_view_perspective_matrix() const {
         return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
                Matrix::translate(-position);
     }
-    //用于天空盒的变换矩阵
+    // 用于天空盒的变换矩阵
     Matrix get_skybox_view_perspective_matrix() const {
         return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
                Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
@@ -1499,7 +1498,7 @@ public:
     ISystem(const std::string &name, bool enable = true) : enable(enable), name(name) {}
     const std::string &get_name() const { return name; }
 
-    virtual void on_attach() {};
+    virtual void on_attach(){};
     virtual void tick() = 0;
 
     virtual ~ISystem() = default;
@@ -1515,21 +1514,20 @@ public:
     Camera camera;
     Clock clock;
 
-    Vector3f ambient_light = {0.02f, 0.02f, 0.02f};//环境光
-    PointLight pointlights[POINTLIGNT_MAX];//点光源
+    Vector3f ambient_light = {0.02f, 0.02f, 0.02f}; // 环境光
+    PointLight pointlights[POINTLIGNT_MAX];         // 点光源
     bool is_light_dirty = true;
 
-    float fog_min_distance = 5.0f;//雾开始的距离
-    float fog_density = 0.001f;//雾强度
+    float fog_min_distance = 5.0f; // 雾开始的距离
+    float fog_density = 0.001f;    // 雾强度
 
-    World(){
-        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f ,1.0f}}, {}}, "root");
+    World() {
+        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {}},
+                                         "root");
     }
 
-    std::shared_ptr<GObject> get_root(){
-        return root;
-    }
-    
+    std::shared_ptr<GObject> get_root() { return root; }
+
     void register_system(ISystem *system) {
         assert(system != nullptr && systems.find(system->get_name()) == systems.end());
         systems.emplace(system->get_name(), system);
@@ -1545,7 +1543,7 @@ public:
     ISystem *get_system(const std::string &name) { return systems.at(name).get(); }
 
     void remove_system(const std::string &name) { systems.erase(name); }
-    
+
     void walk_gobject(GObject *root, uint32_t dirty_flags);
     void tick();
 
@@ -1567,12 +1565,7 @@ public:
         return ori.normalize();
     }
 
-    std::shared_ptr<GObject> pick_up_object(Vector2f screen_xy) const {
-        
-
-
-        return nullptr;
-    }
+    std::shared_ptr<GObject> pick_up_object(Vector2f screen_xy) const { return nullptr; }
 
 private:
     std::shared_ptr<GObject> root;
@@ -1580,7 +1573,7 @@ private:
     SkyBox skybox;
 } world;
 
-//一个可写的uniform buuffer对象的封装
+// 一个可写的uniform buuffer对象的封装
 template <class T> struct WritableUniformBuffer {
     // 在初始化opengl后才能初始化
     void init() {
@@ -1639,9 +1632,9 @@ struct RenderInfo {
         GLsizei height;
     } main_viewport;
 
-    WritableUniformBuffer<PerFrameData> per_frame_uniform;//用于一般渲染每帧变化的数据
-    WritableUniformBuffer<PerObjectData> per_object_uniform;//用于一般渲染每个物体不同的数据
-    
+    WritableUniformBuffer<PerFrameData> per_frame_uniform;   // 用于一般渲染每帧变化的数据
+    WritableUniformBuffer<PerObjectData> per_object_uniform; // 用于一般渲染每个物体不同的数据
+
     unsigned int framebuffer_pickup;
     unsigned int framebuffer_pickup_rbo;
 
@@ -1649,19 +1642,19 @@ struct RenderInfo {
         per_frame_uniform.init();
         per_object_uniform.init();
 
-        //初始化pickup用的framebuffer
+        // 初始化pickup用的framebuffer
         glGenRenderbuffers(1, &framebuffer_pickup_rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, framebuffer_pickup_rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-        //完整的初始化推迟到set_viewport
-        //glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
+        // 完整的初始化推迟到set_viewport
+        // glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
 
         checkError();
-        
+
         glGenFramebuffers(1, &framebuffer_pickup);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_pickup);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, framebuffer_pickup_rbo);        
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, framebuffer_pickup_rbo);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         checkError();
     }
@@ -1694,7 +1687,7 @@ void setup_opengl() {
     const char *version = reinterpret_cast<const char *>(glGetString(GL_VERSION));
     std::cout << vendorName << ": " << version << std::endl;
 
-    if (!GL_EXT_gpu_shader4){
+    if (!GL_EXT_gpu_shader4) {
         std::cerr << "不兼容拓展" << std::endl;
     }
 
@@ -1707,21 +1700,24 @@ void setup_opengl() {
 }
 
 // render
-void GObject::render() const{
+void GObject::render() const {
     {
+        // 遍历此物体的所有part，绘制每一个part
         for (const GameObjectPart &p : parts) {
+            // 填充per_object uniform buffer
             auto data = render_info.per_object_uniform.map();
-            data->model_matrix = p.base_transform.transpose();
-            data->normal_matrix = p.base_normal_matrix.transpose();
+            data->model_matrix = p.base_transform.transpose();      // 变换矩阵
+            data->normal_matrix = p.base_normal_matrix.transpose(); // 法线变换矩阵
             render_info.per_object_uniform.unmap();
 
+            // 查找并绑定材质
             const Material &material = resources.materials.get(p.material_id);
             material.bind();
 
-            const Mesh &mesh = resources.meshes.get(p.mesh_id);
+            const Mesh &mesh = resources.meshes.get(p.mesh_id); // 网格数据
 
-            glBindVertexArray(mesh.VAO_id);
-            glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
+            glBindVertexArray(mesh.VAO_id);                                       // 绑定网格
+            glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
             checkError();
         }
     }
@@ -1734,7 +1730,7 @@ const std::vector<Vector3f> skybox_cube_vertices = {{-1.0, -1.0, -1.0}, {1.0, -1
                                                     {1.0, 1.0, 1.0},    {-1.0, 1.0, 1.0}};
 
 const std::vector<uint16_t> skybox_cube_indices = {3, 0, 1, 1, 2, 3, 6, 7, 3, 3, 2, 6, 0, 3, 7, 7, 4, 0,
-                                            5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
+                                                   5, 6, 2, 2, 1, 5, 6, 5, 4, 4, 7, 6, 0, 4, 5, 5, 1, 0};
 
 const std::vector<Vertex> plane_vertices = {
     {{-1.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}},
@@ -1747,29 +1743,30 @@ const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
 } // namespace Assets
 
 void init_resource() {
-    RenderReousce &resource = resources;
-
-    resource.load_json("assets/resources.json");
-
+    // 从json加载大部分的资源
+    resources.load_json("assets/resources.json");
+    // 材质资源比较特殊，暂时通过硬编码加载
     {
+        // 平滑着色材质
         Vector3f color_while{1.0f, 1.0f, 1.0f};
-        resource.add_material("wood_flat",
-                            MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
+        resources.add_material("wood_flat",
+                               MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
     }
-    
+
     {
+        // 单一颜色材质
         MaterialDesc green_material_desc;
         Vector3f color_green{0.0f, 1.0f, 0.0f};
         green_material_desc.shader_name = "single_color";
         green_material_desc.uniforms.emplace_back(
             MaterialDesc::UniformDataDesc{2, sizeof(Vector3f), color_green.data()});
-        resource.add_material("default", green_material_desc);
+        resources.add_material("default", green_material_desc);
     }
+    // 部分硬编码的mesh
+    resources.add_mesh("default", {}, {});
+    resources.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
 
-    resource.add_mesh("default", {}, {});
-    resource.add_mesh("plane", Assets::plane_vertices, Assets::plane_indices);
-
-    //添加天空盒的mesh，因为格式不一样所以单独处理
+    // 添加天空盒的mesh，因为格式不一样所以单独处理
     {
         unsigned int vao_id, ibo_id, vbo_id;
         glGenVertexArrays(1, &vao_id);
@@ -1779,10 +1776,12 @@ void init_resource() {
         glBindVertexArray(vao_id);
 
         glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-        glBufferData(GL_ARRAY_BUFFER, Assets::skybox_cube_vertices.size() * sizeof(Vector3f), Assets::skybox_cube_vertices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, Assets::skybox_cube_vertices.size() * sizeof(Vector3f),
+                     Assets::skybox_cube_vertices.data(), GL_STATIC_DRAW);
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, Assets::skybox_cube_indices.size() * sizeof(uint16_t), Assets::skybox_cube_indices.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, Assets::skybox_cube_indices.size() * sizeof(uint16_t),
+                     Assets::skybox_cube_indices.data(), GL_STATIC_DRAW);
 
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vector3f), (void *)0);
         glEnableVertexAttribArray(0);
@@ -1793,8 +1792,9 @@ void init_resource() {
 
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        resource.meshes.add("skybox_cube", Mesh{vao_id, (uint32_t)Assets::skybox_cube_indices.size()});
-        resource.deconstructors.emplace_back([vao_id, vbo_id, ibo_id]() {
+        resources.meshes.add("skybox_cube", Mesh{vao_id, (uint32_t)Assets::skybox_cube_indices.size()});
+        // 注册销毁用回调函数在程序结束时调用
+        resources.deconstructors.emplace_back([vao_id, vbo_id, ibo_id]() {
             glDeleteVertexArrays(1, &vao_id);
             glDeleteBuffers(1, &vbo_id);
             glDeleteBuffers(1, &ibo_id);
@@ -1803,12 +1803,13 @@ void init_resource() {
     }
 }
 
+// 从json加载一个Vector3f
 Vector3f load_vec3(const SimpleJson::JsonObject &json) {
     assert(json.get_type() == SimpleJson::JsonType::List);
     const std::vector<SimpleJson::JsonObject> &numbers = json.get_list();
     return {(float)numbers[0].get_number(), (float)numbers[1].get_number(), (float)numbers[2].get_number()};
 }
-
+// 从json加载transform，对不完整或不存在的取默认值
 Transform load_transform(const SimpleJson::JsonObject &json) {
     Transform trans{
         {0.0f, 0.0f, 0.0f},
@@ -1831,13 +1832,14 @@ Transform load_transform(const SimpleJson::JsonObject &json) {
     return trans;
 }
 
-void load_node_from_json(const SimpleJson::JsonObject &node, GObject* root){
+// 从json递归加载节点
+void load_node_from_json(const SimpleJson::JsonObject &node, GObject *root) {
     for (const SimpleJson::JsonObject &object_desc : node.get_list()) {
         GObjectDesc desc{load_transform(object_desc), {}};
         for (const SimpleJson::JsonObject &part_desc : object_desc["parts"].get_list()) {
             desc.parts.emplace_back(part_desc["mesh"].get_string(), part_desc["material"].get_string());
         }
-        const std::string& name = object_desc.has("name") ? object_desc["name"].get_string() : "";
+        const std::string &name = object_desc.has("name") ? object_desc["name"].get_string() : "";
         root->attach_child(std::make_shared<GObject>(std::move(desc), name));
         if (object_desc.has("children")) {
             load_node_from_json(object_desc["children"], root->get_children().back().get());
@@ -1845,6 +1847,7 @@ void load_node_from_json(const SimpleJson::JsonObject &node, GObject* root){
     }
 }
 
+// 从json文件加载场景
 void load_scene_from_json(const std::string &path) {
     SimpleJson::JsonObject json = SimpleJson::parse_file(path);
     // 加载天空盒
@@ -1870,10 +1873,12 @@ void load_scene_from_json(const std::string &path) {
         }
     }
 }
-void init_start_scene() { load_scene_from_json("assets/scene1.json"); }
+void init_start_scene() {
+    load_scene_from_json("assets/scene1.json"); // 整个场景的所有物体都从json加载了
+}
 
 unsigned int calculate_fps(float delta_time) {
-    const float ratio = 0.1f;
+    const float ratio = 0.1f; // 平滑比例
     static float avarage_frame_time = std::nan("");
 
     if (std::isnormal(avarage_frame_time)) {
@@ -1885,39 +1890,43 @@ unsigned int calculate_fps(float delta_time) {
     return (unsigned int)(1000.0f / avarage_frame_time);
 }
 
+// 递归更新物体
 void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
     dirty_flags |= root->is_relat_dirty;
     if (dirty_flags) {
-        if (root->has_parent()){
-            root->relate_model_matrix = root->get_parent().lock()->relate_model_matrix * root->transform.transform_matrix();
-            root->relate_normal_matrix = root->get_parent().lock()->relate_normal_matrix * root->transform.normal_matrix();
+        if (root->has_parent()) {
+            // 子节点的transform为父节点的transform叠加上自身的transform
+            root->relate_model_matrix =
+                root->get_parent().lock()->relate_model_matrix * root->transform.transform_matrix();
+            root->relate_normal_matrix =
+                root->get_parent().lock()->relate_normal_matrix * root->transform.normal_matrix();
         } else {
             root->relate_model_matrix = root->transform.transform_matrix();
             root->relate_normal_matrix = root->transform.normal_matrix();
         }
 
         for (GameObjectPart &p : root->parts) {
+            // 更新自身每一个part的transform
             p.base_transform = root->relate_model_matrix * p.model_matrix;
             p.base_normal_matrix = root->relate_normal_matrix * p.normal_matrix;
         }
         root->is_relat_dirty = false;
     }
 
-    for(auto& child: root->children){
-        walk_gobject(child.get(), dirty_flags);
+    for (auto &child : root->children) {
+        walk_gobject(child.get(), dirty_flags); // 更新子节点
     }
 }
 
 void World::tick() {
-    render_info.tick_count++;
-    clock.update();
-
+    clock.update(); // 更新时钟
+    // 调用所有的系统
     for (const auto &[name, sys] : systems) {
         if (sys->enable) {
             sys->tick();
         }
     }
-
+    // 递归更新所有物体
     walk_gobject(this->root.get(), 0);
 }
 
@@ -1925,48 +1934,57 @@ void World::tick() {
 
 // 渲染天空盒
 void World::render_skybox() {
-    glEnable(GL_CULL_FACE); // 启用面剔除
+    glEnable(GL_CULL_FACE);  // 启用面剔除
     glEnable(GL_DEPTH_TEST); // 启用深度测试
-    glDrawBuffer(GL_BACK); // 渲染到后缓冲区
+    glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
 
+    // 填充天空盒需要的参数（透视投影矩阵）
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
     render_info.per_frame_uniform.unmap();
 
+    // 绑定天空盒专用着色器
     glUseProgram(skybox.shader_program_id);
+    // 绑定天空盒纹理
     glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
     glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.color_texture_id);
-        
+    // 获取天空盒的网格（向内的Cube）
     const Mesh &mesh = resources.meshes.get(skybox.mesh_id);
 
-    glBindVertexArray(mesh.VAO_id);
-    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0);
+    glBindVertexArray(mesh.VAO_id);                                         // 绑定网格
+    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
     checkError();
 }
 
-void render_walk_gobject(const GObject* root){
-    root->render();
+void render_walk_gobject(const GObject *root) {
+    root->render(); // 渲染此物体
     for (auto &child : root->get_children()) {
-        render_walk_gobject(child.get());
+        render_walk_gobject(child.get()); // 递归子节点
     }
 }
 
 void World::render() {
-    glEnable(GL_CULL_FACE); // 启用面剔除
+    // 初始化渲染配置
+    glEnable(GL_CULL_FACE);  // 启用面剔除
     glEnable(GL_DEPTH_TEST); // 启用深度测试
-    glDrawBuffer(GL_BACK); // 渲染到后缓冲区
+    glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
     RenderInfo::Viewport &v = render_info.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
+    // 清除旧画面
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     assert(fog_density >= 0.0f);
-    
+
+    // 填充per_frame uniform数据
     auto data = render_info.per_frame_uniform.map();
+    // 透视投影矩阵
     data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
+    // 相机位置
     data->camera_position = camera.position;
+    // 雾参数
     data->fog_density = fog_density;
     data->fog_min_distance = fog_min_distance;
-
+    // 灯光参数
     if (is_light_dirty) {
         data->ambient_light = world.ambient_light;
         uint32_t count = 0;
@@ -1983,26 +2001,32 @@ void World::render() {
 
         // std::cout << "Update light: count:" << count << std::endl;
     }
-
+    // 填充结束
     render_info.per_frame_uniform.unmap();
 
+    // 绑定per_frame和per_object uniform buffer
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
-    render_walk_gobject(world.get_root().get());
 
-    render_skybox();
+    render_walk_gobject(world.get_root().get()); // 递归渲染所有物体
 
-    glutSwapBuffers();
+    render_skybox(); // 绘制天空盒
+
+    glutSwapBuffers(); // 渲染完毕，交换缓冲区，显示新一帧的画面
     checkError();
 }
 
 #define MY_TITLE "2020270901005 homework 3"
 
 void loop_func() {
+    render_info.tick_count++;
+
     world.tick();
     world.render();
 
     input.clear_mouse_move();
+
+    // 计算和显示FPS
     std::stringstream formatter;
     formatter << MY_TITLE << "  ";
     formatter << "FPS: " << calculate_fps(world.clock.get_delta()) << "  ";
@@ -2093,9 +2117,7 @@ public:
         }
     }
 
-    void on_attach() override {
-        ball = world.get_root()->get_child_by_name("球");
-    }
+    void on_attach() override { ball = world.get_root()->get_child_by_name("球"); }
 
     void tick() override {
         handle_keyboard(world.clock.get_delta());
@@ -2107,6 +2129,7 @@ public:
         world.pointlights[0].position.x = 20.0f * sinf(render_info.tick_count * 0.01f);
         world.is_light_dirty = true;
     }
+
 private:
     std::shared_ptr<GObject> ball;
 };
@@ -2115,45 +2138,46 @@ private:
 #define INIT_WINDOW_HEIGHT 720
 
 int main(int argc, char **argv) {
-    //初始化glut和创建窗口
+    // 初始化glut和创建窗口
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowPosition(100, 100);
     glutInitWindowSize(INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
     glutCreateWindow(MY_TITLE);
 
-    //注册相关函数
-    glutIdleFunc(loop_func);
-    glutDisplayFunc([]() {});
+    // 注册相关函数
+    glutIdleFunc(loop_func);  // 一直不停执行循环函数，此函数包含主要逻辑
+    glutDisplayFunc([]() {}); // 无视DisplayFunc
+    // 保证视口与窗口大小相同
     glutReshapeFunc([](int w, int h) { render_info.set_viewport(0, 0, w, h); });
     glutMouseFunc(handle_mouse_click);
     glutMotionFunc(handle_mouse_move);
     glutPassiveMotionFunc(handle_mouse_move);
 
-    //初始化opengl
+    // 初始化opengl
     setup_opengl();
 
-    //初始化资源和加载资源
+    // 初始化资源和加载资源
     render_info.init();
-    render_info.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
+    render_info.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
     init_resource();
 
-    //加载初始场景
+    // 加载初始场景
     init_start_scene();
 
-    //注册系统
+    // 注册系统
     world.register_system(new MoveSystem("move"));
 
-    //注册在退出时执行的清理操作
-    atexit([]{
+    // 注册在退出时执行的清理操作
+    atexit([] {
         resources.clear();
         render_info.clear();
         std::cout << "Exit!\n";
     });
 
-    world.clock.update();//重置一下时钟
+    world.clock.update(); // 重置一下时钟
 
-    //XX，启动！
+    // XX，启动！
     glutMainLoop();
 
     return 0;
