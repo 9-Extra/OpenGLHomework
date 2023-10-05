@@ -15,6 +15,10 @@
         "skybox":{
             "vs_path": "shaders/skybox/vs.vert",
             "ps_path": "shaders/skybox/ps.frag"
+        },
+        "pick":{
+            "vs_path": "shaders/pick/vs.vert",
+            "ps_path": "shaders/pick/ps.frag"
         }
     },
     "texture": {

@@ -716,12 +716,15 @@ struct Quaternion {
     }
 };
 
-inline void checkError() {
+inline void _check_error(const std::string& file, size_t line) {
     GLenum error;
     while ((error = glGetError()) != GL_NO_ERROR) {
         std::cerr << "GL error 0x" << error << ": " << gluErrorString(error) << std::endl;
+        std::cerr << "At: " << file << ':' << line << std::endl;
     }
 }
+
+#define checkError() _check_error(__FILE__, __LINE__)
 
 class Clock {
 private:
@@ -964,9 +967,6 @@ struct Shader {
     unsigned int program_id;
 };
 
-struct ResouceItem {
-    virtual ~ResouceItem() = default;
-};
 class RenderReousce final {
 public:
     template <class T> class ResourceContainer {
@@ -1567,11 +1567,18 @@ public:
         return ori.normalize();
     }
 
+    std::shared_ptr<GObject> pick_up_object(Vector2f screen_xy) const {
+        
+
+
+        return nullptr;
+    }
+
 private:
     std::shared_ptr<GObject> root;
     std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
     SkyBox skybox;
-};
+} world;
 
 template <class T> struct WritableUniformBuffer {
     // 在初始化opengl后才能初始化
@@ -1633,29 +1640,50 @@ struct RenderInfo {
 
     WritableUniformBuffer<PerFrameData> per_frame_uniform;
     WritableUniformBuffer<PerObjectData> per_object_uniform;
+    
+    unsigned int framebuffer_pickup;
+    unsigned int framebuffer_pickup_rbo;
 
     void init() {
         per_frame_uniform.init();
         per_object_uniform.init();
+
+        glGenRenderbuffers(1, &framebuffer_pickup_rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, framebuffer_pickup_rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+        //完整的初始化推迟到set_viewport
+        //glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
+
+        checkError();
+        
+        glGenFramebuffers(1, &framebuffer_pickup);
+        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_pickup);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, framebuffer_pickup_rbo);        
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        checkError();
     }
 
     void clear() {
         per_frame_uniform.clear();
         per_object_uniform.clear();
-    }
-};
 
-World world;
-RenderInfo render_info;
+        glDeleteRenderbuffers(1, &framebuffer_pickup_rbo);
+        glDeleteFramebuffers(1, &framebuffer_pickup);
+    }
+
+    void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
+        main_viewport = {x, y, width, height};
+        world.camera.aspect = float(width) / float(height);
+        glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
+        checkError();
+        assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+    }
+} render_info;
 
 void bind_standard_uniform() {
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
-}
-
-void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
-    render_info.main_viewport = {x, y, width, height};
-    world.camera.aspect = float(width) / float(height);
 }
 
 void setup_opengl() {
@@ -1665,15 +1693,15 @@ void setup_opengl() {
         std::cerr << "Error: " << glewGetErrorString(err) << std::endl;
     }
 
-    if (!GLEW_ARB_compatibility) {
-        std::cerr << "系统不支持旧的API" << std::endl;
-    }
     const char *vendorName = reinterpret_cast<const char *>(glGetString(GL_VENDOR));
     const char *version = reinterpret_cast<const char *>(glGetString(GL_VERSION));
     std::cout << vendorName << ": " << version << std::endl;
 
+    if (!GL_EXT_gpu_shader4){
+        std::cerr << "不兼容拓展" << std::endl;
+    }
+
     glClearColor(0.0, 0.0, 0.0, 0.0);
-    glEnable(GL_DEPTH_TEST);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW); // 逆时针的面为正面
     glDepthFunc(GL_LESS);
@@ -1958,13 +1986,14 @@ void render_walk_gobject(const GObject* root){
 
 void World::render() {
     glEnable(GL_CULL_FACE); // 启用面剔除
-    // glDrawBuffer(GL_BACK); // 渲染到后缓冲区
+    glEnable(GL_DEPTH_TEST); // 启用深度测试
+    glDrawBuffer(GL_BACK); // 渲染到后缓冲区
     RenderInfo::Viewport &v = render_info.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     assert(fog_density >= 0.0f);
-
+    
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
     data->camera_position = camera.position;
@@ -2123,17 +2152,16 @@ int main(int argc, char **argv) {
     glutInitWindowSize(INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
     glutCreateWindow(MY_TITLE);
 
-    set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
-
     glutIdleFunc(loop_func);
     glutDisplayFunc([]() {});
-    glutReshapeFunc([](int w, int h) { set_viewport(0, 0, w, h); });
+    glutReshapeFunc([](int w, int h) { render_info.set_viewport(0, 0, w, h); });
     glutMouseFunc(handle_mouse_click);
     glutMotionFunc(handle_mouse_move);
     glutPassiveMotionFunc(handle_mouse_move);
 
     setup_opengl();
     render_info.init();
+    render_info.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
     init_resource();
     init_start_scene();
 
