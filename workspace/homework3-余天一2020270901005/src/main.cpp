@@ -1746,33 +1746,6 @@ const std::vector<Vertex> plane_vertices = {
 const std::vector<uint16_t> plane_indices = {3, 2, 0, 2, 1, 0};
 } // namespace Assets
 
-std::tuple<std::vector<Vertex>, std::vector<uint16_t>> generate_circle(uint16_t edge_count) {
-    assert((size_t)edge_count * 3 <= std::numeric_limits<uint16_t>::max());
-    // 生产circle的顶点
-    std::vector<Vertex> circle_vertices(edge_count + 1);
-    // 中心点为{0, 0, 0}，半径为1，edge_count边型，edge_count + 1个顶点
-    circle_vertices[0] = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.5f, 0.5f}}; // 中心点
-    for (uint16_t i = 1; i < circle_vertices.size(); i++) {
-        float angle = to_radian(360.0f / edge_count * (i - 1));
-        Vector3f pos = {sinf(angle), cosf(angle), 0.0f};
-        circle_vertices[i] = {pos, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {(pos.x + 1.0f) / 2.0f, (pos.y + 1.0f) / 2.0f}};
-    }
-
-    std::vector<uint16_t> circle_indices(edge_count * 3); // edge_count个三角形
-    for (uint16_t i = 0; i <= edge_count - 1; i++) {      // 前edge_count - 1个
-        // 逆时针
-        circle_indices[i * 3] = 0;
-        circle_indices[i * 3 + 1] = i + 2;
-        circle_indices[i * 3 + 2] = i + 1;
-    }
-    // 最后一个
-    circle_indices[edge_count * 3 - 3] = 0;
-    circle_indices[edge_count * 3 - 2] = 1;
-    circle_indices[edge_count * 3 - 1] = edge_count;
-
-    return {circle_vertices, circle_indices};
-}
-
 void init_resource() {
     RenderReousce &resource = resources;
 
@@ -1827,11 +1800,6 @@ void init_resource() {
             glDeleteBuffers(1, &ibo_id);
             checkError();
         });
-    }
-
-    {
-        auto [circle_vertices, circle_indices] = generate_circle(100);
-        resource.add_mesh("circle", circle_vertices, circle_indices);
     }
 }
 
