@@ -850,6 +850,7 @@ unsigned int complie_shader_program(const std::string &vs_path, const std::strin
     return shaderProgram;
 }
 
+//加载图像并预先进行反向gamma矫正
 FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool is_normal=false){
     FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
     if (pImage_ori == nullptr) {
@@ -857,7 +858,7 @@ FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool i
         exit(-1);
     }
     FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
-    FreeImage_FlipVertical(pImage);
+    FreeImage_FlipVertical(pImage);//翻转，适应opengl的方向
     if (!is_normal){
         FreeImage_AdjustGamma(pImage, 1 / 2.2);
     }
@@ -866,6 +867,7 @@ FIBITMAP* freeimage_load_and_convert_image(const std::string& image_path, bool i
     return pImage;
 }
 
+//平移旋转缩放
 struct Transform {
     Vector3f position;
     Vector3f rotation;
@@ -932,8 +934,6 @@ struct MaterialDesc {
     std::vector<SampleData> samplers;
 };
 
-// 绑定标准可用的uniform
-void bind_standard_uniform();
 struct Material {
     struct UniformData {
         uint32_t binding_id;
@@ -951,8 +951,6 @@ struct Material {
     void bind() const {
         glUseProgram(shaderprogram_id);
 
-        bind_standard_uniform();
-
         for (const UniformData &u : uniforms) {
             glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
         }
@@ -967,6 +965,7 @@ struct Shader {
     unsigned int program_id;
 };
 
+//资源管理器
 class RenderReousce final {
 public:
     template <class T> class ResourceContainer {
@@ -1475,11 +1474,12 @@ public:
         return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
     }
 
+    //用于一般物体的变换矩阵
     Matrix get_view_perspective_matrix() const {
         return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
                Matrix::translate(-position);
     }
-
+    //用于天空盒的变换矩阵
     Matrix get_skybox_view_perspective_matrix() const {
         return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
                Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
@@ -1515,12 +1515,12 @@ public:
     Camera camera;
     Clock clock;
 
-    Vector3f ambient_light = {0.02f, 0.02f, 0.02f};
-    PointLight pointlights[POINTLIGNT_MAX];
+    Vector3f ambient_light = {0.02f, 0.02f, 0.02f};//环境光
+    PointLight pointlights[POINTLIGNT_MAX];//点光源
     bool is_light_dirty = true;
 
-    float fog_min_distance = 5.0f;
-    float fog_density = 0.001f;
+    float fog_min_distance = 5.0f;//雾开始的距离
+    float fog_density = 0.001f;//雾强度
 
     World(){
         root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f ,1.0f}}, {}}, "root");
@@ -1580,6 +1580,7 @@ private:
     SkyBox skybox;
 } world;
 
+//一个可写的uniform buuffer对象的封装
 template <class T> struct WritableUniformBuffer {
     // 在初始化opengl后才能初始化
     void init() {
@@ -1638,8 +1639,8 @@ struct RenderInfo {
         GLsizei height;
     } main_viewport;
 
-    WritableUniformBuffer<PerFrameData> per_frame_uniform;
-    WritableUniformBuffer<PerObjectData> per_object_uniform;
+    WritableUniformBuffer<PerFrameData> per_frame_uniform;//用于一般渲染每帧变化的数据
+    WritableUniformBuffer<PerObjectData> per_object_uniform;//用于一般渲染每个物体不同的数据
     
     unsigned int framebuffer_pickup;
     unsigned int framebuffer_pickup_rbo;
@@ -1648,6 +1649,7 @@ struct RenderInfo {
         per_frame_uniform.init();
         per_object_uniform.init();
 
+        //初始化pickup用的framebuffer
         glGenRenderbuffers(1, &framebuffer_pickup_rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, framebuffer_pickup_rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
@@ -1680,11 +1682,6 @@ struct RenderInfo {
         assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
     }
 } render_info;
-
-void bind_standard_uniform() {
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
-}
 
 void setup_opengl() {
     glewExperimental = GL_TRUE;
@@ -1961,6 +1958,8 @@ void World::tick() {
 // 渲染天空盒
 void World::render_skybox() {
     glEnable(GL_CULL_FACE); // 启用面剔除
+    glEnable(GL_DEPTH_TEST); // 启用深度测试
+    glDrawBuffer(GL_BACK); // 渲染到后缓冲区
 
     auto data = render_info.per_frame_uniform.map();
     data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
@@ -2019,6 +2018,8 @@ void World::render() {
 
     render_info.per_frame_uniform.unmap();
 
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
     render_walk_gobject(world.get_root().get());
 
     render_skybox();
@@ -2146,12 +2147,14 @@ private:
 #define INIT_WINDOW_HEIGHT 720
 
 int main(int argc, char **argv) {
+    //初始化glut和创建窗口
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
     glutInitWindowPosition(100, 100);
     glutInitWindowSize(INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
     glutCreateWindow(MY_TITLE);
 
+    //注册相关函数
     glutIdleFunc(loop_func);
     glutDisplayFunc([]() {});
     glutReshapeFunc([](int w, int h) { render_info.set_viewport(0, 0, w, h); });
@@ -2159,12 +2162,18 @@ int main(int argc, char **argv) {
     glutMotionFunc(handle_mouse_move);
     glutPassiveMotionFunc(handle_mouse_move);
 
+    //初始化opengl
     setup_opengl();
+
+    //初始化资源和加载资源
     render_info.init();
     render_info.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT);
     init_resource();
+
+    //加载初始场景
     init_start_scene();
 
+    //注册系统
     world.register_system(new MoveSystem("move"));
 
     //注册在退出时执行的清理操作
@@ -2174,8 +2183,9 @@ int main(int argc, char **argv) {
         std::cout << "Exit!\n";
     });
 
-    world.clock.update();
+    world.clock.update();//重置一下时钟
 
+    //XX，启动！
     glutMainLoop();
 
     return 0;
