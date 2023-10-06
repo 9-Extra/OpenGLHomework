@@ -2,9 +2,10 @@
 #include <GL/glut.h>	
 #include "SThreadPool.h"
 #include "glmath.h"
+#include <memory>
 
 
-static SThreadPool::ThreadPool pool;
+static SThreadPool::ThreadPool pool(1);
 
 using namespace std;
 // 全局变量
@@ -30,45 +31,35 @@ struct Material
 	float ior;			
 	MaterialType type;
 	Material(MaterialType t) { type = t; }
-};
 
-//---------------------------
-// 派生类：粗糙材质
-struct RoughMaterial: Material
-{
-	RoughMaterial(vec3 _kd, vec3 _ks, float _shininess) : Material(ROUGH)
-	{
-		ka = _kd * M_PI;
-		kd = _kd;
-		ks = _ks;
-		shininess = _shininess;
-	}
-};
+    // 粗糙材质
+    static Material RoughMaterial(vec3 _kd, vec3 _ks, float _shininess){
+        Material m(ROUGH);
+        m.ka = _kd * M_PI;
+		m.kd = _kd;
+		m.ks = _ks;
+		m.shininess = _shininess;
+        return m;
+    }
 
-//---------------------------
-// 派生类：反射材质
-struct ReflectiveMaterial: Material
-{
-	// n: 反射率；
+    // 派生类：反射材质
+    // n: 反射率；
 	// kappa：extinction coefficient(消光系数)
-	ReflectiveMaterial(vec3 n, vec3 kappa) :Material(REFLECTIVE)
-	{
-		vec3 one(1, 1, 1);
-		F0 = ((n - one) * (n - one) + kappa * kappa) / ((n + one) * (n + one) + kappa * kappa);		// Fresnel公式
-	}
-};
+    static Material ReflectiveMaterial(vec3 n, vec3 kappa) {
+        Material m(REFLECTIVE);
+        vec3 one(1, 1, 1);
+		m.F0 = ((n - one) * (n - one) + kappa * kappa) / ((n + one) * (n + one) + kappa * kappa);		// Fresnel公式
+        return m;
+    }
 
-//---------------------------
-// 派生类：折射材质
-struct RefractiveMaterial: Material
-{
-	// n：折射率；一个物体透明，光显然不会在其内部消逝，因此第二项忽略
-	RefractiveMaterial(vec3 n): Material(REFRACTIVE)
-	{
-		vec3 one(1, 1, 1);
-		F0 = ((n - one) * (n - one)) / ((n + one) * (n + one));
-		ior = n.x;		// 该物体的折射率取单色光或取均值都可以
-	}
+    // n：折射率；一个物体透明，光显然不会在其内部消逝，因此第二项忽略
+    static Material RefractiveMaterial(vec3 n) {
+        Material m(REFRACTIVE);
+        vec3 one(1, 1, 1);
+        m.F0 = ((n - one) * (n - one)) / ((n + one) * (n + one));
+		m.ior = n.x;		// 该物体的折射率取单色光或取均值都可以
+        return m;
+    }
 };
 
 //---------------------------
@@ -99,11 +90,12 @@ struct Ray
 class Intersectable			
 {
 public:
+    Intersectable(Material _material): material(_material) {}
 	// 虚函数，需要根据不同物品表面类型实现求交
 	virtual Hit intersect(const Ray& ray) = 0;		
 
 protected:
-	Material* material;
+	Material material;
 };
 
 //---------------------------
@@ -113,12 +105,7 @@ class Sphere : public Intersectable
 	vec3 center;
 	float radius;
 public:
-	Sphere(const vec3& _center, float _radius, Material* _material)
-	{
-		center = _center;
-		radius = _radius;
-		material = _material;
-	}
+	Sphere(const vec3& _center, float _radius, Material _material): Intersectable(_material), center(_center), radius(_radius) {}
 	~Sphere() {}
 
 	// 光线与球体求交点
@@ -140,7 +127,7 @@ public:
 		hit.s = (s2 > 0) ? s2 : s1;		// 取近的那个交点
 		hit.position = ray.start + ray.dir * hit.s;
 		hit.normal = (hit.position - center) / radius;
-		hit.material = material;
+		hit.material = &material;
 		return hit;
 	}
 };
@@ -153,12 +140,7 @@ class Plane :public Intersectable
 	vec3 p0;			// 线上一点坐标，N(p-p0)=0
 
 public:
-	Plane(vec3 _p0, vec3 _normal, Material* _material)
-	{
-		normal = normalize(_normal);
-		p0 = _p0;
-		material = _material;
-	}
+	Plane(vec3 _p0, vec3 _normal, Material _material): Intersectable(_material), normal(_normal), p0(_p0) {}
 
 	// 光线与平面求交点
 	Hit intersect(const Ray& ray)
@@ -178,7 +160,7 @@ public:
 		hit.s = s1;
 		hit.position = ray.start + ray.dir * hit.s;
 		hit.normal = normal;
-		hit.material = material;
+		hit.material = &material;
 
 		return hit;
 	}
@@ -236,7 +218,7 @@ public:
 
 	void zoomInOut(float dz)		// 修改eye的位置
 	{
-		eye.z += dz;
+		eye = eye + normalize(eye - lookat) * dz;
 		set(eye, lookat, up, fov);
 		//cout << "\t" << eye.z << " " << dz << endl;
 	
@@ -246,9 +228,9 @@ public:
 //---------------------------
 // 场景，物品和光源集合
 class Scene {
-	vector<Intersectable*> objects; // 物品
+	vector<std::unique_ptr<Intersectable>> objects; // 物品
 	// 光源
-	vector<Light*> lights;
+	vector<std::unique_ptr<Light>> lights;
 	ViewPoint viewPoint;
 	vec3 La;		// 环境光
 public:
@@ -263,7 +245,7 @@ public:
 		La = vec3(0.4f, 0.4f, 0.4f);
 		vec3 lightDirection(1, 1, 1);
 		vec3 Le(2, 2, 2); // 光照强度
-		lights.push_back(new Light(lightDirection, Le));
+		lights.emplace_back(std::make_unique<Light>(lightDirection, Le));
 
 		// 镜面反射率
 		vec3 ks(2, 2, 2);
@@ -271,20 +253,20 @@ public:
 		// 添加物品
 		// 漫反射球
 		// 偏黄色
-		objects.push_back(new Sphere(vec3(0.55, -0.2, 0), 0.3, new RoughMaterial(vec3(0.3, 0.2, 0.1), ks, 50)));  
+		objects.emplace_back(new Sphere(vec3(0.55, -0.2, 0), 0.3, Material::RoughMaterial(vec3(0.3, 0.2, 0.1), ks, 50)));  
 		// 偏蓝色
-		objects.push_back(new Sphere(vec3(1.2, 0.8, 0), 0.2, new RoughMaterial(vec3(0.1, 0.2, 0.3), ks, 100)));  
+		objects.emplace_back(new Sphere(vec3(1.2, 0.8, 0), 0.2, Material::RoughMaterial(vec3(0.1, 0.2, 0.3), ks, 100)));  
 		// 偏红色
-		objects.push_back(new Sphere(vec3(-1.25, 0.8, -0.8), 0.3, new RoughMaterial(vec3(0.3, 0, 0.2), ks, 20)));	 
-		objects.push_back(new Sphere(vec3(0, 0.5, -0.8), 0.4, new RoughMaterial(vec3(0.3, 0, 0.2), ks, 20)));	
+		objects.emplace_back(new Sphere(vec3(-1.25, 0.8, -0.8), 0.3, Material::RoughMaterial(vec3(0.3, 0, 0.2), ks, 20)));	 
+		objects.emplace_back(new Sphere(vec3(0, 0.5, -0.8), 0.4, Material::RoughMaterial(vec3(0.3, 0, 0.2), ks, 20)));	
 		
 		// 镜面反射球
-		objects.push_back(new Sphere(vec3(-1.2, 0, 0), 0.5, new ReflectiveMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1, 2.3, 3.1))));	
-		objects.push_back(new Sphere(vec3(0.5, 0.5, 0), 0.3, new ReflectiveMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1, 2.3, 3.1))));	
+		objects.emplace_back(new Sphere(vec3(-1.2, 0, 0), 0.5, Material::ReflectiveMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1, 2.3, 3.1))));	
+		objects.emplace_back(new Sphere(vec3(0.5, 0.5, 0), 0.3, Material::ReflectiveMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1, 2.3, 3.1))));	
 		
 		// 镜面反射平面
 		// objects.push_back(new Plane(vec3(0, -0.6,0), vec3(0, 1, 0), new ReflectiveMaterial(vec3(0.14, 0.16, 0.13), vec3(4.1, 2.3, 3.1))));
-		objects.push_back(new Plane(vec3(0, -0.6,0), vec3(0, 1, 0), new RoughMaterial(vec3(0.1, 0.2, 0.3), ks, 100))); 
+		objects.emplace_back(new Plane(vec3(0, -0.6,0), vec3(0, 1, 0), Material::RoughMaterial(vec3(0.1, 0.2, 0.3), ks, 100))); 
 	}
 
     // 渲染视窗上每个点的着色(逐像素调用trace函数)
@@ -292,9 +274,9 @@ public:
         // std::cout << "Start Rendering" << std::endl;
         long timeStart = glutGet(GLUT_ELAPSED_TIME);
         // 对视窗的每一个像素做渲染
-        for (int Y = 0; Y < windowHeight; Y++) {
+        for (uint32_t Y = 0; Y < windowHeight; Y++) {
             pool.add_task([this, &image, Y] {
-                for (int X = 0; X < windowWidth; X++) {
+                for (uint32_t X = 0; X < windowWidth; X++) {
                     // 追踪这条光线，获得返回的颜色
                     vec3 color = trace(viewPoint.getRay(X, Y));
                     image[Y * windowWidth + X] = vec4(color.x, color.y, color.z, 1);
@@ -315,7 +297,7 @@ public:
 	Hit firstIntersect(Ray ray)		
 	{
 		Hit bestHit;
-		for (Intersectable* object : objects)
+		for (auto& object : objects)
 		{
 			Hit hit = object->intersect(ray);
 			if (hit.s > 0 && (bestHit.s < 0 || hit.s < bestHit.s))
@@ -331,7 +313,7 @@ public:
 	// 该射线在指向光源的路径上是否与其他物体有交
 	bool shadowIntersect(Ray ray)	
 	{
-		for (Intersectable* object : objects)
+		for (auto& object : objects)
 			if (object->intersect(ray).s > 0)
 				return true;
 		return false;
@@ -352,7 +334,7 @@ public:
 		{
 			// 初始化返回光线（或者阴影）
 			vec3 outRadiance = hit.material->ka * La;		
-			for (Light* light : lights)
+			for (auto& light : lights)
 			{
 				Ray shadowRay(hit.position + hit.normal * epsilon, light->direction);
 				float cosTheta = dot(hit.normal, light->direction);
@@ -421,7 +403,7 @@ class FullScreenTexturedQuad {
 	unsigned int textureId = 0;	
 
 public:
-	FullScreenTexturedQuad(int windowWidth, int windowHeight)
+	FullScreenTexturedQuad(uint32_t windowWidth, uint32_t windowHeight)
 	{
 		// 启用二维纹理
 		glEnable(GL_TEXTURE_2D);
@@ -491,25 +473,27 @@ void onDisplay()
 	
 	// 场景绘制（通过光线追踪计算所有像素值，保存在image中）
 	scene.render(image);
-	
-	// 把光线追踪计算的image作为场景纹理
-	fullScreenTexturedQuad->LoadTexture(image);
 
-	// 绘制纹理
-	glBegin(GL_POLYGON);
-		// 设置纹理坐标与顶点坐标
-		glTexCoord2f(0.0, 0.0);
-		glVertex3f(-1.0, -1.0, 0.0);
+    glDrawPixels(windowWidth, windowHeight, GL_RGBA, GL_FLOAT, &image[0]);
+	
+	// // 把光线追踪计算的image作为场景纹理
+	// fullScreenTexturedQuad->LoadTexture(image);
+
+	// // 绘制纹理
+	// glBegin(GL_POLYGON);
+	// 	// 设置纹理坐标与顶点坐标
+	// 	glTexCoord2f(0.0, 0.0);
+	// 	glVertex3f(-1.0, -1.0, 0.0);
 		
-		glTexCoord2f(0.0, 1.0);
-		glVertex3f(-1.0, 1.0, 0.0);
+	// 	glTexCoord2f(0.0, 1.0);
+	// 	glVertex3f(-1.0, 1.0, 0.0);
 		
-		glTexCoord2f(1.0, 1.0);
-		glVertex3f(1.0, 1.0, 0.0);
+	// 	glTexCoord2f(1.0, 1.0);
+	// 	glVertex3f(1.0, 1.0, 0.0);
 		
-		glTexCoord2f(1.0, 0.0);
-		glVertex3f(1.0, -1.0, 0.0);
-	glEnd();
+	// 	glTexCoord2f(1.0, 0.0);
+	// 	glVertex3f(1.0, -1.0, 0.0);
+	// glEnd();
 
 	glutSwapBuffers();
 
@@ -548,11 +532,11 @@ void onKeyboard(unsigned char key, int pX, int pY)
 	if (key == '2')
 		glutIdleFunc(NULL);
     
-    if (key == 'w'){
+    if (key == 's'){
         scene.zoomInOut(0.5f);
     }
     
-    if (key == 's'){
+    if (key == 'w'){
         scene.zoomInOut(-0.5f);
     }
 }
