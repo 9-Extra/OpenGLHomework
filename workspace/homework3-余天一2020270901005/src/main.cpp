@@ -684,9 +684,6 @@ struct GameObjectPart {
         : mesh_id(resources.meshes.find(mesh_name)), material_id(resources.materials.find(material_name)),
           topology(topology), model_matrix(transform.transform_matrix()), normal_matrix(transform.normal_matrix()) {}
 
-private:
-    friend class World;
-    friend class GObject;
     Matrix base_transform;
     Matrix base_normal_matrix;
 };
@@ -708,8 +705,6 @@ public:
     GObject(const std::string name = "") : name(name){};
     GObject(GObjectDesc &&desc, const std::string name = "")
         : name(name), transform(desc.transform), parts(std::move(desc.parts)){};
-
-    void render() const;
 
     void add_part(const GameObjectPart &part) {
         GameObjectPart &p = parts.emplace_back(part);
@@ -776,139 +771,6 @@ private:
     std::vector<std::shared_ptr<GObject>> children;
 };
 
-struct Camera {
-public:
-    Camera() {
-        position = {0.0f, 0.0f, 0.0f};
-        rotation = {0.0f, 0.0f, 0.0f};
-        fov = 1.57f;
-        near_z = 1.0f;
-        far_z = 1000.0f;
-    }
-
-    Vector3f position;
-    Vector3f rotation; // zxy
-    float aspect;
-    float fov, near_z, far_z;
-
-    // 获取目视方向
-    Vector3f get_orientation() const {
-        float pitch = rotation[1];
-        float yaw = rotation[2];
-        return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
-    }
-
-    Vector3f get_up_direction() const {
-        float sp = sinf(rotation[1]);
-        float cp = cosf(rotation[1]);
-        float cr = cosf(rotation[0]);
-        float sr = sinf(rotation[0]);
-        float sy = sinf(rotation[2]);
-        float cy = cosf(rotation[2]);
-
-        return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
-    }
-
-    // 用于一般物体的变换矩阵
-    Matrix get_view_perspective_matrix() const {
-        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
-               Matrix::translate(-position);
-    }
-    // 用于天空盒的变换矩阵
-    Matrix get_skybox_view_perspective_matrix() const {
-        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
-               Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
-    }
-};
-
-struct SkyBox {
-    unsigned int color_texture_id;
-    unsigned int shader_program_id;
-    uint32_t mesh_id;
-};
-
-class ISystem {
-public:
-    bool enable;
-
-    ISystem(const std::string &name, bool enable = true) : enable(enable), name(name) {}
-    const std::string &get_name() const { return name; }
-
-    virtual void on_attach(){};
-    virtual void tick() = 0;
-
-    virtual ~ISystem() = default;
-
-private:
-    const std::string name;
-};
-
-#define POINTLIGNT_MAX 8
-
-class World {
-public:
-    Camera camera;
-    Clock clock;
-
-    Vector3f ambient_light = {0.02f, 0.02f, 0.02f}; // 环境光
-    PointLight pointlights[POINTLIGNT_MAX];         // 点光源
-    bool is_light_dirty = true;
-
-    float fog_min_distance = 5.0f; // 雾开始的距离
-    float fog_density = 0.001f;    // 雾强度
-
-    World() {
-        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {}},
-                                         "root");
-    }
-
-    std::shared_ptr<GObject> get_root() { return root; }
-
-    void register_system(ISystem *system) {
-        assert(system != nullptr && systems.find(system->get_name()) == systems.end());
-        systems.emplace(system->get_name(), system);
-        system->on_attach();
-    }
-
-    void set_skybox(const std::string &color_cubemap_key) {
-        skybox.color_texture_id = resources.cubemaps.get(resources.cubemaps.find(color_cubemap_key)).texture_id;
-        skybox.shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
-        skybox.mesh_id = resources.meshes.find("skybox_cube");
-    }
-
-    ISystem *get_system(const std::string &name) { return systems.at(name).get(); }
-
-    void remove_system(const std::string &name) { systems.erase(name); }
-
-    void walk_gobject(GObject *root, uint32_t dirty_flags);
-    void tick();
-
-    void render_skybox();
-    void render();
-    // 获取屏幕上的一点对应的射线方向
-    Vector3f get_screen_point_oritation(Vector2f screen_xy) const {
-        float w_w = 400;
-        float w_h = 300;
-        Vector3f camera_up = camera.get_up_direction();
-        Vector3f camera_forward = camera.get_orientation();
-        Vector3f camera_right = camera_forward.cross(camera_up);
-        float tan_fov = std::tan(camera.fov / 2);
-
-        Vector3f ori = camera.get_orientation() +
-                       camera_right * ((screen_xy.x / w_w - 0.5f) * tan_fov * w_w / w_h * 2.0f) +
-                       camera_up * ((0.5f - screen_xy.y / w_h) * tan_fov * 2.0f);
-
-        return ori.normalize();
-    }
-
-    std::shared_ptr<GObject> pick_up_object(Vector2f screen_xy) const { return nullptr; }
-
-private:
-    std::shared_ptr<GObject> root;
-    std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
-    SkyBox skybox;
-} world;
-
 // 一个可写的uniform buuffer对象的封装
 template <class T> struct WritableUniformBuffer {
     // 在初始化opengl后才能初始化
@@ -944,6 +806,8 @@ struct PointLightData final {
     alignas(16) Vector3f position;  // 0
     alignas(16) Vector3f intensity; // 4
 };
+
+#define POINTLIGNT_MAX 8
 struct PerFrameData final {
     Matrix view_perspective_matrix;
     alignas(16) Vector3f ambient_light; // 3 * 4 + 4
@@ -1003,14 +867,202 @@ struct RenderInfo {
         glDeleteFramebuffers(1, &framebuffer_pickup);
     }
 
-    void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
-        main_viewport = {x, y, width, height};
-        world.camera.aspect = float(width) / float(height);
-        glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
-        checkError();
-        assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-    }
+    void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height);
 } render_info;
+
+class Pass{
+public:
+    void accept(GameObjectPart* part){
+        parts.push_back(part);
+    }
+
+    virtual void run() = 0;
+protected:
+    std::vector<GameObjectPart*> parts;
+    void reset() {
+        parts.clear();
+    }
+
+    friend class Renderer;
+};
+
+class LamertainPass : public Pass{
+public:
+    virtual void run() override;
+};
+
+class SkyBoxPass : public Pass{
+public:
+    SkyBoxPass(){
+        shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
+        mesh_id = resources.meshes.find("skybox_cube");
+    }
+    void set_skybox(unsigned int texture_id) {
+        skybox_texture_id = texture_id;
+    }
+    virtual void run() override;
+private:
+    //每帧更新
+    unsigned int skybox_texture_id = 0;
+    //初始化时设定
+    unsigned int shader_program_id;
+    uint32_t mesh_id;
+};
+
+class Renderer final{
+public:
+    std::unique_ptr<LamertainPass> lamertain_pass;
+    std::unique_ptr<SkyBoxPass> skybox_pass;
+    void init() {
+        lamertain_pass = std::make_unique<LamertainPass>();
+        skybox_pass = std::make_unique<SkyBoxPass>();
+    }
+
+    void render(){
+        lamertain_pass->run();
+        skybox_pass->run();
+
+        lamertain_pass->reset();
+        skybox_pass->reset();
+
+        glutSwapBuffers(); // 渲染完毕，交换缓冲区，显示新一帧的画面
+        checkError();
+    }
+} renderer;
+
+struct Camera {
+public:
+    Camera() {
+        position = {0.0f, 0.0f, 0.0f};
+        rotation = {0.0f, 0.0f, 0.0f};
+        fov = 1.57f;
+        near_z = 1.0f;
+        far_z = 1000.0f;
+    }
+
+    Vector3f position;
+    Vector3f rotation; // zxy
+    float aspect;
+    float fov, near_z, far_z;
+
+    // 获取目视方向
+    Vector3f get_orientation() const {
+        float pitch = rotation[1];
+        float yaw = rotation[2];
+        return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
+    }
+
+    Vector3f get_up_direction() const {
+        float sp = sinf(rotation[1]);
+        float cp = cosf(rotation[1]);
+        float cr = cosf(rotation[0]);
+        float sr = sinf(rotation[0]);
+        float sy = sinf(rotation[2]);
+        float cy = cosf(rotation[2]);
+
+        return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
+    }
+
+    // 用于一般物体的变换矩阵
+    Matrix get_view_perspective_matrix() const {
+        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
+               Matrix::translate(-position);
+    }
+    // 用于天空盒的变换矩阵
+    Matrix get_skybox_view_perspective_matrix() const {
+        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
+               Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
+    }
+};
+
+struct SkyBox {
+    unsigned int color_texture_id;
+};
+
+class ISystem {
+public:
+    bool enable;
+
+    ISystem(const std::string &name, bool enable = true) : enable(enable), name(name) {}
+    const std::string &get_name() const { return name; }
+
+    virtual void on_attach(){};
+    virtual void tick() = 0;
+
+    virtual ~ISystem() = default;
+
+private:
+    const std::string name;
+};
+
+#define POINTLIGNT_MAX 8
+
+class World {
+public:
+    Camera camera;
+    Clock clock;
+
+    Vector3f ambient_light = {0.02f, 0.02f, 0.02f}; // 环境光
+    PointLight pointlights[POINTLIGNT_MAX];         // 点光源
+    bool is_light_dirty = true;
+
+    float fog_min_distance = 5.0f; // 雾开始的距离
+    float fog_density = 0.001f;    // 雾强度
+
+    World() {
+        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {}},
+                                         "root");
+    }
+
+    std::shared_ptr<GObject> get_root() { return root; }
+
+    void register_system(ISystem *system) {
+        assert(system != nullptr && systems.find(system->get_name()) == systems.end());
+        systems.emplace(system->get_name(), system);
+        system->on_attach();
+    }
+
+    void set_skybox(const std::string &color_cubemap_key) {
+        skybox.color_texture_id = resources.cubemaps.get(resources.cubemaps.find(color_cubemap_key)).texture_id;
+    }
+
+    ISystem *get_system(const std::string &name) { return systems.at(name).get(); }
+
+    void remove_system(const std::string &name) { systems.erase(name); }
+
+    void walk_gobject(GObject *root, uint32_t dirty_flags);
+    void tick();
+    // 获取屏幕上的一点对应的射线方向
+    Vector3f get_screen_point_oritation(Vector2f screen_xy) const {
+        float w_w = 400;
+        float w_h = 300;
+        Vector3f camera_up = camera.get_up_direction();
+        Vector3f camera_forward = camera.get_orientation();
+        Vector3f camera_right = camera_forward.cross(camera_up);
+        float tan_fov = std::tan(camera.fov / 2);
+
+        Vector3f ori = camera.get_orientation() +
+                       camera_right * ((screen_xy.x / w_w - 0.5f) * tan_fov * w_w / w_h * 2.0f) +
+                       camera_up * ((0.5f - screen_xy.y / w_h) * tan_fov * 2.0f);
+
+        return ori.normalize();
+    }
+
+    std::shared_ptr<GObject> pick_up_object(Vector2f screen_xy) const { return nullptr; }
+
+private:
+    std::shared_ptr<GObject> root;
+    std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
+    SkyBox skybox;
+} world;
+
+void RenderInfo::set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
+    main_viewport = {x, y, width, height};
+    world.camera.aspect = float(width) / float(height);
+    glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
+    checkError();
+    assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+}
 
 void setup_opengl() {
     glewExperimental = GL_TRUE;
@@ -1035,28 +1087,97 @@ void setup_opengl() {
     checkError();
 }
 
-// render
-void GObject::render() const {
-    {
-        // 遍历此物体的所有part，绘制每一个part
-        for (const GameObjectPart &p : parts) {
-            // 填充per_object uniform buffer
-            auto data = render_info.per_object_uniform.map();
-            data->model_matrix = p.base_transform.transpose();      // 变换矩阵
-            data->normal_matrix = p.base_normal_matrix.transpose(); // 法线变换矩阵
-            render_info.per_object_uniform.unmap();
+//一般物体渲染
+void LamertainPass::run() {
+    // 初始化渲染配置
+    glEnable(GL_CULL_FACE);  // 启用面剔除
+    glEnable(GL_DEPTH_TEST); // 启用深度测试
+    glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
+    RenderInfo::Viewport &v = render_info.main_viewport;
+    glViewport(v.x, v.y, v.width, v.height);
+    // 清除旧画面
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // 查找并绑定材质
-            const Material &material = resources.materials.get(p.material_id);
-            material.bind();
+    assert(world.fog_density >= 0.0f);
 
-            const Mesh &mesh = resources.meshes.get(p.mesh_id); // 网格数据
-
-            glBindVertexArray(mesh.VAO_id);                                       // 绑定网格
-            glDrawElements(p.topology, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
-            checkError();
+    // 填充per_frame uniform数据
+    auto data = render_info.per_frame_uniform.map();
+    // 透视投影矩阵
+    data->view_perspective_matrix = world.camera.get_view_perspective_matrix().transpose();
+    // 相机位置
+    data->camera_position = world.camera.position;
+    // 雾参数
+    data->fog_density = world.fog_density;
+    data->fog_min_distance = world.fog_min_distance;
+    // 灯光参数
+    if (world.is_light_dirty) {
+        data->ambient_light = world.ambient_light;
+        uint32_t count = 0;
+        for (const PointLight &l : world.pointlights) {
+            if (l.enabled) {
+                PointLightData &d = data->pointlight_list[count];
+                d.position = l.position;
+                d.intensity = l.color * l.factor;
+                count++;
+            }
         }
+        data->pointlight_num = count;
+        world.is_light_dirty = false;
+
+        // std::cout << "Update light: count:" << count << std::endl;
     }
+    // 填充结束
+    render_info.per_frame_uniform.unmap();
+
+    // 绑定per_frame和per_object uniform buffer
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
+
+    // 遍历所有part，绘制每一个part
+    for (const GameObjectPart *p : parts) {
+        // 填充per_object uniform buffer
+        auto data = render_info.per_object_uniform.map();
+        data->model_matrix = p->base_transform.transpose();      // 变换矩阵
+        data->normal_matrix = p->base_normal_matrix.transpose(); // 法线变换矩阵
+        render_info.per_object_uniform.unmap();
+
+        // 查找并绑定材质
+        const Material &material = resources.materials.get(p->material_id);
+        material.bind();
+
+        const Mesh &mesh = resources.meshes.get(p->mesh_id); // 网格数据
+
+        glBindVertexArray(mesh.VAO_id);                                        // 绑定网格
+        glDrawElements(p->topology, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
+        checkError();
+    }
+}
+
+#define SKYBOX_COLOR_BINDING 5
+
+// 渲染天空盒
+void SkyBoxPass::run() {
+    glEnable(GL_CULL_FACE);  // 启用面剔除
+    glEnable(GL_DEPTH_TEST); // 启用深度测试
+    glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
+
+    // 填充天空盒需要的参数（透视投影矩阵）
+    auto data = render_info.per_frame_uniform.map();
+    data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
+    render_info.per_frame_uniform.unmap();
+
+    // 绑定天空盒专用着色器
+    glUseProgram(shader_program_id);
+    // 绑定天空盒纹理
+    glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
+    assert(skybox_texture_id != 0); // 天空纹理必须存在
+    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture_id);
+    // 获取天空盒的网格（向内的Cube）
+    const Mesh &mesh = resources.meshes.get(mesh_id);
+
+    glBindVertexArray(mesh.VAO_id);                                         // 绑定网格
+    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
+    checkError();
 }
 
 namespace Assets {
@@ -1248,6 +1369,11 @@ void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
         }
         root->is_relat_dirty = false;
     }
+    //将此物体提交渲染
+    for (GameObjectPart &p : root->parts) {
+        // 提交自身每一个part
+        renderer.lamertain_pass->accept(&p);
+    }
 
     for (auto &child : root->children) {
         walk_gobject(child.get(), dirty_flags); // 更新子节点
@@ -1264,92 +1390,9 @@ void World::tick() {
     }
     // 递归更新所有物体
     walk_gobject(this->root.get(), 0);
-}
 
-#define SKYBOX_COLOR_BINDING 5
-
-// 渲染天空盒
-void World::render_skybox() {
-    glEnable(GL_CULL_FACE);  // 启用面剔除
-    glEnable(GL_DEPTH_TEST); // 启用深度测试
-    glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
-
-    // 填充天空盒需要的参数（透视投影矩阵）
-    auto data = render_info.per_frame_uniform.map();
-    data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
-    render_info.per_frame_uniform.unmap();
-
-    // 绑定天空盒专用着色器
-    glUseProgram(skybox.shader_program_id);
-    // 绑定天空盒纹理
-    glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.color_texture_id);
-    // 获取天空盒的网格（向内的Cube）
-    const Mesh &mesh = resources.meshes.get(skybox.mesh_id);
-
-    glBindVertexArray(mesh.VAO_id);                                         // 绑定网格
-    glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
-    checkError();
-}
-
-void render_walk_gobject(const GObject *root) {
-    root->render(); // 渲染此物体
-    for (auto &child : root->get_children()) {
-        render_walk_gobject(child.get()); // 递归子节点
-    }
-}
-
-void World::render() {
-    // 初始化渲染配置
-    glEnable(GL_CULL_FACE);  // 启用面剔除
-    glEnable(GL_DEPTH_TEST); // 启用深度测试
-    glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
-    RenderInfo::Viewport &v = render_info.main_viewport;
-    glViewport(v.x, v.y, v.width, v.height);
-    // 清除旧画面
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    assert(fog_density >= 0.0f);
-
-    // 填充per_frame uniform数据
-    auto data = render_info.per_frame_uniform.map();
-    // 透视投影矩阵
-    data->view_perspective_matrix = camera.get_view_perspective_matrix().transpose();
-    // 相机位置
-    data->camera_position = camera.position;
-    // 雾参数
-    data->fog_density = fog_density;
-    data->fog_min_distance = fog_min_distance;
-    // 灯光参数
-    if (is_light_dirty) {
-        data->ambient_light = world.ambient_light;
-        uint32_t count = 0;
-        for (const PointLight &l : world.pointlights) {
-            if (l.enabled) {
-                PointLightData &d = data->pointlight_list[count];
-                d.position = l.position;
-                d.intensity = l.color * l.factor;
-                count++;
-            }
-        }
-        data->pointlight_num = count;
-        is_light_dirty = false;
-
-        // std::cout << "Update light: count:" << count << std::endl;
-    }
-    // 填充结束
-    render_info.per_frame_uniform.unmap();
-
-    // 绑定per_frame和per_object uniform buffer
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
-
-    render_walk_gobject(world.get_root().get()); // 递归渲染所有物体
-
-    render_skybox(); // 绘制天空盒
-
-    glutSwapBuffers(); // 渲染完毕，交换缓冲区，显示新一帧的画面
-    checkError();
+    //上传天空盒
+    renderer.skybox_pass->set_skybox(skybox.color_texture_id);
 }
 
 #define MY_TITLE "2020270901005 homework 3"
@@ -1358,7 +1401,7 @@ void loop_func() {
     render_info.tick_count++;
 
     world.tick();
-    world.render();
+    renderer.render();
 
     input.clear_mouse_move();
 
@@ -1497,6 +1540,8 @@ int main(int argc, char **argv) {
     render_info.init();
     render_info.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
     init_resource();
+
+    renderer.init();
 
     // 加载初始场景
     init_start_scene();
