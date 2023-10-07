@@ -5,7 +5,7 @@
 #include <memory>
 
 
-static SThreadPool::ThreadPool pool(1);
+static SThreadPool::ThreadPool pool;
 
 using namespace std;
 // 全局变量
@@ -443,12 +443,14 @@ void onInitialization()
 }
 
 long timebase=0;
+long time_last_frame;
 void showFrame()
 {
-    static long frame=0, time=0;
+    static long frame=0;
 	// 计算帧率
     frame++;
-    time=glutGet(GLUT_ELAPSED_TIME);
+    long time = glutGet(GLUT_ELAPSED_TIME);
+    time_last_frame = time;
 
     if (time - timebase > 1000) {
         float fps = frame*1000.0/(time-timebase);
@@ -474,26 +476,27 @@ void onDisplay()
 	// 场景绘制（通过光线追踪计算所有像素值，保存在image中）
 	scene.render(image);
 
-    glDrawPixels(windowWidth, windowHeight, GL_RGBA, GL_FLOAT, &image[0]);
+    //使用这种方法的话画面不能缩放
+    //glDrawPixels(windowWidth, windowHeight, GL_RGBA, GL_FLOAT, &image[0]);
 	
-	// // 把光线追踪计算的image作为场景纹理
-	// fullScreenTexturedQuad->LoadTexture(image);
+	// 把光线追踪计算的image作为场景纹理
+	fullScreenTexturedQuad->LoadTexture(image);
 
-	// // 绘制纹理
-	// glBegin(GL_POLYGON);
-	// 	// 设置纹理坐标与顶点坐标
-	// 	glTexCoord2f(0.0, 0.0);
-	// 	glVertex3f(-1.0, -1.0, 0.0);
+	// 绘制纹理
+	glBegin(GL_POLYGON);
+		// 设置纹理坐标与顶点坐标
+		glTexCoord2f(0.0, 0.0);
+		glVertex3f(-1.0, -1.0, 0.0);
 		
-	// 	glTexCoord2f(0.0, 1.0);
-	// 	glVertex3f(-1.0, 1.0, 0.0);
+		glTexCoord2f(0.0, 1.0);
+		glVertex3f(-1.0, 1.0, 0.0);
 		
-	// 	glTexCoord2f(1.0, 1.0);
-	// 	glVertex3f(1.0, 1.0, 0.0);
+		glTexCoord2f(1.0, 1.0);
+		glVertex3f(1.0, 1.0, 0.0);
 		
-	// 	glTexCoord2f(1.0, 0.0);
-	// 	glVertex3f(1.0, -1.0, 0.0);
-	// glEnd();
+		glTexCoord2f(1.0, 0.0);
+		glVertex3f(1.0, -1.0, 0.0);
+	glEnd();
 
 	glutSwapBuffers();
 
@@ -520,7 +523,8 @@ void onReshape(int w, int h) {
 void onIdle()
 {
 	// 视点旋转
-	scene.animate(0.1f);
+    long time = glutGet(GLUT_ELAPSED_TIME);
+	scene.animate(0.003f * (time - time_last_frame));
 
 	glutPostRedisplay();
 }
@@ -533,11 +537,13 @@ void onKeyboard(unsigned char key, int pX, int pY)
 		glutIdleFunc(NULL);
     
     if (key == 's'){
-        scene.zoomInOut(0.5f);
+        long time = glutGet(GLUT_ELAPSED_TIME);
+        scene.zoomInOut(0.05f * (time - time_last_frame));
     }
     
     if (key == 'w'){
-        scene.zoomInOut(-0.5f);
+        long time = glutGet(GLUT_ELAPSED_TIME);
+        scene.zoomInOut(-0.05f * (time - time_last_frame));
     }
 }
 
@@ -545,19 +551,15 @@ void onKeyboard(unsigned char key, int pX, int pY)
 // Entry point of the application
 int main(int argc, char* argv[]) {
 	// Initialize GLUT, Glew and OpenGL 
-    std::cout << "Initializing GLUT..." << std::endl;
 	glutInit(&argc, argv);
 
 	glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
 	glutInitWindowSize(windowWidth, windowHeight);				// Application window is initially of resolution 600x600
 	glutInitWindowPosition(100, 100);							// Relative location of the application window
-	std::cout << "Initializing Window..." << std::endl;
     glutCreateWindow("Ray Tracing");
-    std::cout << "Initializing Window done" << std::endl;
 
 	glewExperimental = true;
 	glewInit();
-    std::cout << "Initializing Glew..." << std::endl;
 	// Initialize this program and create shaders
 	onInitialization();
 
@@ -568,7 +570,6 @@ int main(int argc, char* argv[]) {
 	// 键盘
 	glutKeyboardFunc(onKeyboard);
 
-    std::cout << "Starting program" << std::endl;
 	glutMainLoop();
 	
 	return 1;
