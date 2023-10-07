@@ -802,54 +802,99 @@ private:
     unsigned int id = 0;
 };
 
-struct PointLightData final {
-    alignas(16) Vector3f position;  // 0
-    alignas(16) Vector3f intensity; // 4
+class Pass{
+public:
+    virtual void run() = 0;
+    friend class Renderer;
 };
 
-#define POINTLIGNT_MAX 8
-struct PerFrameData final {
-    Matrix view_perspective_matrix;
-    alignas(16) Vector3f ambient_light; // 3 * 4 + 4
-    alignas(16) Vector3f camera_position;
-    alignas(4) float fog_min_distance;
-    alignas(4) float fog_density;
-    alignas(4) uint32_t pointlight_num; // 4
-    PointLightData pointlight_list[POINTLIGNT_MAX];
-};
-
-struct PerObjectData {
-    Matrix model_matrix;
-    Matrix normal_matrix;
-};
-struct RenderInfo {
-    uint32_t tick_count = 0;
-
-    struct Viewport {
-        GLint x;
-        GLint y;
-        GLsizei width;
-        GLsizei height;
-    } main_viewport;
-
-    WritableUniformBuffer<PerFrameData> per_frame_uniform;   // 用于一般渲染每帧变化的数据
-    WritableUniformBuffer<PerObjectData> per_object_uniform; // 用于一般渲染每个物体不同的数据
-
-    unsigned int framebuffer_pickup;
-    unsigned int framebuffer_pickup_rbo;
-
-    void init() {
+class LamertainPass : public Pass {
+public:
+    LamertainPass() {
         per_frame_uniform.init();
         per_object_uniform.init();
+    }
 
+    ~LamertainPass(){
+        per_frame_uniform.clear();
+        per_object_uniform.clear();
+    }
+
+    void accept(GameObjectPart* part){
+        parts.push_back(part);
+    }
+
+    void reset() {
+        parts.clear();
+    }
+
+    virtual void run() override;
+
+private:
+    struct PointLightData final {
+        alignas(16) Vector3f position;  // 0
+        alignas(16) Vector3f intensity; // 4
+    };
+
+#define POINTLIGNT_MAX 8
+    struct PerFrameData final {
+        Matrix view_perspective_matrix;
+        alignas(16) Vector3f ambient_light; // 3 * 4 + 4
+        alignas(16) Vector3f camera_position;
+        alignas(4) float fog_min_distance;
+        alignas(4) float fog_density;
+        alignas(4) uint32_t pointlight_num; // 4
+        PointLightData pointlight_list[POINTLIGNT_MAX];
+    };
+
+    struct PerObjectData {
+        Matrix model_matrix;
+        Matrix normal_matrix;
+    };
+
+    std::vector<GameObjectPart*> parts; // 记录要渲染的对象
+    WritableUniformBuffer<PerFrameData> per_frame_uniform;   // 用于一般渲染每帧变化的数据
+    WritableUniformBuffer<PerObjectData> per_object_uniform; // 用于一般渲染每个物体不同的数据
+};
+
+class SkyBoxPass : public Pass{
+public:
+    SkyBoxPass(){
+        shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
+        mesh_id = resources.meshes.find("skybox_cube");
+
+        skybox_uniform.init();
+    }
+
+    ~SkyBoxPass() {
+        skybox_uniform.clear();
+    }
+    void set_skybox(unsigned int texture_id) {
+        skybox_texture_id = texture_id;
+    }
+    virtual void run() override;
+private:
+    struct SkyBoxData final {
+        Matrix skybox_view_perspective_matrix;
+    };
+
+    //每帧更新
+    WritableUniformBuffer<SkyBoxData> skybox_uniform;
+    unsigned int skybox_texture_id = 0;
+    //初始化时设定
+    unsigned int shader_program_id;
+    uint32_t mesh_id;
+};
+
+class PickupPass : public Pass {
+public:
+    PickupPass(){
         // 初始化pickup用的framebuffer
         glGenRenderbuffers(1, &framebuffer_pickup_rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, framebuffer_pickup_rbo);
         glBindRenderbuffer(GL_RENDERBUFFER, 0);
 
-        // 完整的初始化推迟到set_viewport
-        // glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
-
+        // 完整的初始化推迟到使用的时候
         checkError();
 
         glGenFramebuffers(1, &framebuffer_pickup);
@@ -859,74 +904,64 @@ struct RenderInfo {
         checkError();
     }
 
-    void clear() {
-        per_frame_uniform.clear();
-        per_object_uniform.clear();
+    virtual void run() override;
 
+    ~PickupPass(){
         glDeleteRenderbuffers(1, &framebuffer_pickup_rbo);
         glDeleteFramebuffers(1, &framebuffer_pickup);
     }
-
-    void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height);
-} render_info;
-
-class Pass{
-public:
-    void accept(GameObjectPart* part){
-        parts.push_back(part);
-    }
-
-    virtual void run() = 0;
-protected:
-    std::vector<GameObjectPart*> parts;
-    void reset() {
-        parts.clear();
-    }
-
-    friend class Renderer;
-};
-
-class LamertainPass : public Pass{
-public:
-    virtual void run() override;
-};
-
-class SkyBoxPass : public Pass{
-public:
-    SkyBoxPass(){
-        shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
-        mesh_id = resources.meshes.find("skybox_cube");
-    }
-    void set_skybox(unsigned int texture_id) {
-        skybox_texture_id = texture_id;
-    }
-    virtual void run() override;
 private:
-    //每帧更新
-    unsigned int skybox_texture_id = 0;
-    //初始化时设定
-    unsigned int shader_program_id;
-    uint32_t mesh_id;
+    unsigned int framebuffer_pickup;
+    unsigned int framebuffer_pickup_rbo;
+
+    // 设置framebuffer大小，显然要和视口一样大
+    void set_framebuffer_size(unsigned int width, unsigned int height) {
+        glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, width, height);
+        checkError();
+        assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
+    }
 };
 
 class Renderer final{
 public:
+    struct Viewport {
+        GLint x;
+        GLint y;
+        GLsizei width;
+        GLsizei height;
+    } main_viewport; // 主视口
+
+    // passes
     std::unique_ptr<LamertainPass> lamertain_pass;
     std::unique_ptr<SkyBoxPass> skybox_pass;
+    std::unique_ptr<PickupPass> pickup_pass;
+
     void init() {
         lamertain_pass = std::make_unique<LamertainPass>();
         skybox_pass = std::make_unique<SkyBoxPass>();
+        pickup_pass = std::make_unique<PickupPass>();
+    }
+
+    void accept(GameObjectPart* part){
+        lamertain_pass->accept(part);
     }
 
     void render(){
         lamertain_pass->run();
         skybox_pass->run();
+        //pickup_pass->run();
 
         lamertain_pass->reset();
-        skybox_pass->reset();
-
         glutSwapBuffers(); // 渲染完毕，交换缓冲区，显示新一帧的画面
         checkError();
+    }
+
+    void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height);
+
+    void clear() {
+        lamertain_pass.reset();
+        skybox_pass.reset();
+        pickup_pass.reset();
     }
 } renderer;
 
@@ -1014,6 +1049,7 @@ public:
                                          "root");
     }
 
+    uint64_t get_tick_count() { return tick_count; }
     std::shared_ptr<GObject> get_root() { return root; }
 
     void register_system(ISystem *system) {
@@ -1054,14 +1090,13 @@ private:
     std::shared_ptr<GObject> root;
     std::unordered_map<std::string, std::unique_ptr<ISystem>> systems;
     SkyBox skybox;
+
+    uint64_t tick_count = 0;
 } world;
 
-void RenderInfo::set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
+void Renderer::set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
     main_viewport = {x, y, width, height};
     world.camera.aspect = float(width) / float(height);
-    glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, main_viewport.width, main_viewport.height);
-    checkError();
-    assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
 }
 
 void setup_opengl() {
@@ -1093,7 +1128,7 @@ void LamertainPass::run() {
     glEnable(GL_CULL_FACE);  // 启用面剔除
     glEnable(GL_DEPTH_TEST); // 启用深度测试
     glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
-    RenderInfo::Viewport &v = render_info.main_viewport;
+    Renderer::Viewport &v = renderer.main_viewport;
     glViewport(v.x, v.y, v.width, v.height);
     // 清除旧画面
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -1101,7 +1136,7 @@ void LamertainPass::run() {
     assert(world.fog_density >= 0.0f);
 
     // 填充per_frame uniform数据
-    auto data = render_info.per_frame_uniform.map();
+    auto data = per_frame_uniform.map();
     // 透视投影矩阵
     data->view_perspective_matrix = world.camera.get_view_perspective_matrix().transpose();
     // 相机位置
@@ -1127,19 +1162,19 @@ void LamertainPass::run() {
         // std::cout << "Update light: count:" << count << std::endl;
     }
     // 填充结束
-    render_info.per_frame_uniform.unmap();
+    per_frame_uniform.unmap();
 
     // 绑定per_frame和per_object uniform buffer
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, render_info.per_frame_uniform.get_id());
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, render_info.per_object_uniform.get_id());
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, per_frame_uniform.get_id());
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, per_object_uniform.get_id());
 
     // 遍历所有part，绘制每一个part
     for (const GameObjectPart *p : parts) {
         // 填充per_object uniform buffer
-        auto data = render_info.per_object_uniform.map();
+        auto data = per_object_uniform.map();
         data->model_matrix = p->base_transform.transpose();      // 变换矩阵
         data->normal_matrix = p->base_normal_matrix.transpose(); // 法线变换矩阵
-        render_info.per_object_uniform.unmap();
+        per_object_uniform.unmap();
 
         // 查找并绑定材质
         const Material &material = resources.materials.get(p->material_id);
@@ -1162,12 +1197,14 @@ void SkyBoxPass::run() {
     glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
 
     // 填充天空盒需要的参数（透视投影矩阵）
-    auto data = render_info.per_frame_uniform.map();
-    data->view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
-    render_info.per_frame_uniform.unmap();
+    auto data = skybox_uniform.map();
+    data->skybox_view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
+    skybox_uniform.unmap();
 
     // 绑定天空盒专用着色器
     glUseProgram(shader_program_id);
+    // 绑定uniform buffer
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, skybox_uniform.get_id());
     // 绑定天空盒纹理
     glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
     assert(skybox_texture_id != 0); // 天空纹理必须存在
@@ -1179,6 +1216,16 @@ void SkyBoxPass::run() {
     glDrawElements(GL_TRIANGLES, mesh.indices_count, GL_UNSIGNED_SHORT, 0); // 绘制
     checkError();
 }
+
+void PickupPass::run() {
+    set_framebuffer_size(renderer.main_viewport.width, renderer.main_viewport.height);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_pickup);
+    glViewport(0, 0, renderer.main_viewport.width, renderer.main_viewport.height);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+} 
 
 namespace Assets {
 
@@ -1372,7 +1419,7 @@ void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
     //将此物体提交渲染
     for (GameObjectPart &p : root->parts) {
         // 提交自身每一个part
-        renderer.lamertain_pass->accept(&p);
+        renderer.accept(&p);
     }
 
     for (auto &child : root->children) {
@@ -1381,6 +1428,8 @@ void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
 }
 
 void World::tick() {
+    tick_count++;
+
     clock.update(); // 更新时钟
     // 调用所有的系统
     for (const auto &[name, sys] : systems) {
@@ -1398,8 +1447,6 @@ void World::tick() {
 #define MY_TITLE "2020270901005 homework 3"
 
 void loop_func() {
-    render_info.tick_count++;
-
     world.tick();
     renderer.render();
 
@@ -1505,7 +1552,7 @@ public:
         ball->transform.rotation.x += world.clock.get_delta() * 0.001f;
         ball->transform.rotation.y += world.clock.get_delta() * 0.003f;
         ball->is_relat_dirty = true;
-        world.pointlights[0].position.x = 20.0f * sinf(render_info.tick_count * 0.01f);
+        world.pointlights[0].position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
         world.is_light_dirty = true;
     }
 
@@ -1528,7 +1575,7 @@ int main(int argc, char **argv) {
     glutIdleFunc(loop_func);  // 一直不停执行循环函数，此函数包含主要逻辑
     glutDisplayFunc([]() {}); // 无视DisplayFunc
     // 保证视口与窗口大小相同
-    glutReshapeFunc([](int w, int h) { render_info.set_viewport(0, 0, w, h); });
+    glutReshapeFunc([](int w, int h) { renderer.set_viewport(0, 0, w, h); });
     glutMouseFunc(handle_mouse_click);
     glutMotionFunc(handle_mouse_move);
     glutPassiveMotionFunc(handle_mouse_move);
@@ -1537,8 +1584,7 @@ int main(int argc, char **argv) {
     setup_opengl();
 
     // 初始化资源和加载资源
-    render_info.init();
-    render_info.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
+    renderer.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
     init_resource();
 
     renderer.init();
@@ -1552,7 +1598,7 @@ int main(int argc, char **argv) {
     // 注册在退出时执行的清理操作
     atexit([] {
         resources.clear();
-        render_info.clear();
+        renderer.clear();
         std::cout << "Exit!\n";
     });
 
