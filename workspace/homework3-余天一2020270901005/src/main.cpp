@@ -568,7 +568,7 @@ public:
 
                 std::vector<Vertex> vertices(vertex_count);
                 for (uint32_t i = 0; i < vertex_count; i++) {
-                    // tangent的第四个分量是用来根据平台决定手性的，在opengl中始终应该取1
+                    // tangent的第四个分量是用来根据平台决定手性的，在opengl中始终应该取1，所以忽略
                     Vector3f tang = Vector3f(tangent[i].x, tangent[i].y, tangent[i].z);
                     vertices[i] = {pos[i], normal[i], tang, uv[i]};
                 }
@@ -683,7 +683,8 @@ struct GameObjectPart {
                    const Transform &transform = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}})
         : mesh_id(resources.meshes.find(mesh_name)), material_id(resources.materials.find(material_name)),
           topology(topology), model_matrix(transform.transform_matrix()), normal_matrix(transform.normal_matrix()) {}
-
+    
+    //在遍历节点树时计算和填写
     Matrix base_transform;
     Matrix base_normal_matrix;
 };
@@ -711,6 +712,8 @@ public:
         p.base_transform = relate_model_matrix * p.model_matrix;
         p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
     }
+
+    std::vector<GameObjectPart> &get_parts() { return parts; }
 
     ~GObject() {
         assert(!parent.lock()); // 必须没有父节点
@@ -765,13 +768,12 @@ public:
     }
 
 private:
-    friend class World;
     std::vector<GameObjectPart> parts;
     std::weak_ptr<GObject> parent;
     std::vector<std::shared_ptr<GObject>> children;
 };
 
-// 一个可写的uniform buuffer对象的封装
+// 一个可写的uniform buffer对象的封装
 template <class T> struct WritableUniformBuffer {
     // 在初始化opengl后才能初始化
     void init() {
@@ -808,14 +810,14 @@ public:
     friend class Renderer;
 };
 
-class LamertainPass : public Pass {
+class LambertianPass : public Pass {
 public:
-    LamertainPass() {
+    LambertianPass() {
         per_frame_uniform.init();
         per_object_uniform.init();
     }
 
-    ~LamertainPass(){
+    ~LambertianPass(){
         per_frame_uniform.clear();
         per_object_uniform.clear();
     }
@@ -932,26 +934,26 @@ public:
     } main_viewport; // 主视口
 
     // passes
-    std::unique_ptr<LamertainPass> lamertain_pass;
+    std::unique_ptr<LambertianPass> lambertian_pass;
     std::unique_ptr<SkyBoxPass> skybox_pass;
     std::unique_ptr<PickupPass> pickup_pass;
 
     void init() {
-        lamertain_pass = std::make_unique<LamertainPass>();
+        lambertian_pass = std::make_unique<LambertianPass>();
         skybox_pass = std::make_unique<SkyBoxPass>();
         pickup_pass = std::make_unique<PickupPass>();
     }
 
     void accept(GameObjectPart* part){
-        lamertain_pass->accept(part);
+        lambertian_pass->accept(part);
     }
 
     void render(){
-        lamertain_pass->run();
+        lambertian_pass->run();
         skybox_pass->run();
         //pickup_pass->run();
 
-        lamertain_pass->reset();
+        lambertian_pass->reset();
         glutSwapBuffers(); // 渲染完毕，交换缓冲区，显示新一帧的画面
         checkError();
     }
@@ -959,7 +961,7 @@ public:
     void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height);
 
     void clear() {
-        lamertain_pass.reset();
+        lambertian_pass.reset();
         skybox_pass.reset();
         pickup_pass.reset();
     }
@@ -1045,12 +1047,19 @@ public:
     float fog_density = 0.001f;    // 雾强度
 
     World() {
-        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {}},
-                                         "root");
+        clear_objects();
+    }
+
+    void clear() {
+        root = nullptr;
+        systems.clear();
     }
 
     uint64_t get_tick_count() { return tick_count; }
     std::shared_ptr<GObject> get_root() { return root; }
+    void clear_objects() {
+        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {}}, "root");
+    }
 
     void register_system(ISystem *system) {
         assert(system != nullptr && systems.find(system->get_name()) == systems.end());
@@ -1123,7 +1132,7 @@ void setup_opengl() {
 }
 
 //一般物体渲染
-void LamertainPass::run() {
+void LambertianPass::run() {
     // 初始化渲染配置
     glEnable(GL_CULL_FACE);  // 启用面剔除
     glEnable(GL_DEPTH_TEST); // 启用深度测试
@@ -1133,7 +1142,9 @@ void LamertainPass::run() {
     // 清除旧画面
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    assert(world.fog_density >= 0.0f);
+    // 绑定per_frame和per_object uniform buffer
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, per_frame_uniform.get_id());
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, per_object_uniform.get_id());
 
     // 填充per_frame uniform数据
     auto data = per_frame_uniform.map();
@@ -1142,6 +1153,7 @@ void LamertainPass::run() {
     // 相机位置
     data->camera_position = world.camera.position;
     // 雾参数
+    assert(world.fog_density >= 0.0f);
     data->fog_density = world.fog_density;
     data->fog_min_distance = world.fog_min_distance;
     // 灯光参数
@@ -1163,10 +1175,6 @@ void LamertainPass::run() {
     }
     // 填充结束
     per_frame_uniform.unmap();
-
-    // 绑定per_frame和per_object uniform buffer
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, per_frame_uniform.get_id());
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, per_object_uniform.get_id());
 
     // 遍历所有part，绘制每一个part
     for (const GameObjectPart *p : parts) {
@@ -1223,6 +1231,8 @@ void PickupPass::run() {
     glViewport(0, 0, renderer.main_viewport.width, renderer.main_viewport.height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    //todo
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 } 
@@ -1409,7 +1419,7 @@ void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
             root->relate_normal_matrix = root->transform.normal_matrix();
         }
 
-        for (GameObjectPart &p : root->parts) {
+        for (GameObjectPart &p : root->get_parts()) {
             // 更新自身每一个part的transform
             p.base_transform = root->relate_model_matrix * p.model_matrix;
             p.base_normal_matrix = root->relate_normal_matrix * p.normal_matrix;
@@ -1417,12 +1427,12 @@ void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
         root->is_relat_dirty = false;
     }
     //将此物体提交渲染
-    for (GameObjectPart &p : root->parts) {
+    for (GameObjectPart &p : root->get_parts()) {
         // 提交自身每一个part
         renderer.accept(&p);
     }
 
-    for (auto &child : root->children) {
+    for (auto &child : root->get_children()) {
         walk_gobject(child.get(), dirty_flags); // 更新子节点
     }
 }
@@ -1584,10 +1594,11 @@ int main(int argc, char **argv) {
     setup_opengl();
 
     // 初始化资源和加载资源
-    renderer.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
     init_resource();
 
+    //初始化渲染相关pass等
     renderer.init();
+    renderer.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
 
     // 加载初始场景
     init_start_scene();
@@ -1597,6 +1608,7 @@ int main(int argc, char **argv) {
 
     // 注册在退出时执行的清理操作
     atexit([] {
+        world.clear();
         resources.clear();
         renderer.clear();
         std::cout << "Exit!\n";

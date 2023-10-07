@@ -24,7 +24,6 @@
             },
             "parts": [
                 {
-                    "transform": {},
                     "mesh": "wood_floor.Sphere",
                     "material": "wood_floor.wood_floor_deck"
                 }
@@ -51,7 +50,6 @@
                     },
                     "parts": [
                         {
-                            "transform": {},
                             "mesh": "wood_floor.Sphere",
                             "material": "wood_floor.wood_floor_deck"
                         }
