@@ -4,19 +4,23 @@
 #include <array>
 #include <assert.h>
 #include <chrono>
-#include <cmath>
-#include <functional>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
 
+#include "winapi.h"
 #include "CGmath.h"
 #include "Sjson.h"
+#include "RenderResource.h"
+#include "utils.h"
 
-#include "winapi.h"
 #include <FreeImage.h>
+
+#define INIT_WINDOW_WIDTH 1080
+#define INIT_WINDOW_HEIGHT 720
+#define MY_TITLE "2020270901005 homework 3"
 
 // Mingw的ifstream不知道为什么导致了崩溃，手动实现文件读取
 std::string read_whole_file(const std::string &path) {
@@ -51,16 +55,6 @@ std::string read_whole_file(const std::string &path) {
 
     return chunk;
 }
-
-inline void _check_error(const std::string &file, size_t line) {
-    GLenum error;
-    while ((error = glGetError()) != GL_NO_ERROR) {
-        std::cerr << "GL error 0x" << error << ": " << gluErrorString(error) << std::endl;
-        std::cerr << "At: " << file << ':' << line << std::endl;
-    }
-}
-
-#define checkError() _check_error(__FILE__, __LINE__)
 
 class Clock {
 private:
@@ -137,539 +131,6 @@ void handle_mouse_click(int button, int state, int x, int y) {
         input.mouse_state &= 0 << InputHandler::mouse_button_map(button);
     }
 }
-
-unsigned int complie_shader(const char *const src, unsigned int shader_type) {
-    unsigned int id = glCreateShader(shader_type);
-
-    glShaderSource(id, 1, &src, NULL);
-    glCompileShader(id);
-
-    int success;
-    char infoLog[512];
-    glGetShaderiv(id, GL_COMPILE_STATUS, &success);
-
-    if (!success) {
-        glGetShaderInfoLog(id, 512, NULL, infoLog);
-        std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-        exit(-1);
-    }
-
-    return id;
-}
-
-unsigned int complie_shader_program(const std::string &vs_path, const std::string &ps_path) {
-    std::string vs_src = read_whole_file(vs_path);
-    std::string ps_src = read_whole_file(ps_path);
-
-    unsigned int vs = complie_shader(vs_src.c_str(), GL_VERTEX_SHADER);
-    unsigned int ps = complie_shader(ps_src.c_str(), GL_FRAGMENT_SHADER);
-
-    unsigned int shaderProgram;
-    shaderProgram = glCreateProgram();
-
-    glAttachShader(shaderProgram, vs);
-    glAttachShader(shaderProgram, ps);
-    glLinkProgram(shaderProgram);
-
-    int success;
-    char infoLog[512];
-
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cout << infoLog << std::endl;
-        exit(-1);
-    }
-
-    glDeleteShader(vs);
-    glDeleteShader(ps);
-
-    return shaderProgram;
-}
-
-// 加载图像并预先进行反向gamma矫正
-FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path, bool is_normal = false) {
-    FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
-    if (pImage_ori == nullptr) {
-        std::cerr << "Failed to load image: " << image_path << std::endl;
-        exit(-1);
-    }
-    FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
-    FreeImage_FlipVertical(pImage); // 翻转，适应opengl的方向
-    if (!is_normal) {
-        FreeImage_AdjustGamma(pImage, 1 / 2.2);
-    }
-    FreeImage_Unload(pImage_ori);
-
-    return pImage;
-}
-
-// 平移旋转缩放
-struct Transform {
-    Vector3f position;
-    Vector3f rotation;
-    Vector3f scale;
-
-    Matrix transform_matrix() const {
-        return Matrix::translate(position) * Matrix::rotate(rotation) * Matrix::scale(scale);
-    }
-    Matrix normal_matrix() const {
-        return Matrix::rotate(rotation) * Matrix::scale({1.0f / scale.x, 1.0f / scale.y, 1.0f / scale.z});
-    }
-};
-
-struct Vertex {
-    Vector3f position;
-    Vector3f normal;
-    Vector3f tangent;
-    Vector2f uv;
-};
-
-struct PointLight {
-    Vector3f position;
-    Vector3f color;
-    float factor;
-    bool enabled = false;
-};
-
-struct DirectionalLight {
-    Vector3f direction;
-    Vector3f flux;
-};
-
-struct Mesh {
-    unsigned int VAO_id;
-    uint32_t indices_count;
-};
-
-struct TextureDesc {
-    std::string path;
-};
-
-struct Texture {
-    unsigned int texture_id;
-};
-
-struct CubeMap {
-    unsigned int texture_id;
-};
-
-struct MaterialDesc {
-    struct UniformDataDesc {
-        const uint32_t binding_id;
-        const uint32_t size;
-        const void *data;
-    };
-
-    struct SampleData {
-        uint32_t binding_id;
-        std::string texture_key;
-    };
-
-    std::string shader_name;
-    std::vector<UniformDataDesc> uniforms;
-    std::vector<SampleData> samplers;
-};
-
-struct Material {
-    struct UniformData {
-        uint32_t binding_id;
-        uint32_t buffer_id;
-    };
-    struct SampleData {
-        uint32_t binding_id;
-        unsigned int texture_id;
-    };
-
-    unsigned int shaderprogram_id; // 对应的shader的id
-    std::vector<UniformData> uniforms;
-    std::vector<SampleData> samplers;
-
-    void bind() const {
-        glUseProgram(shaderprogram_id); // 绑定此材质关联的着色器
-
-        // 绑定材质的uniform buffer
-        for (const UniformData &u : uniforms) {
-            glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
-        }
-        // 绑定所有纹理
-        for (const SampleData &s : samplers) {
-            glActiveTexture(GL_TEXTURE0 + s.binding_id);
-            glBindTexture(GL_TEXTURE_2D, s.texture_id);
-        }
-    }
-};
-
-struct Shader {
-    unsigned int program_id;
-};
-
-// 资源管理器
-class RenderReousce final {
-public:
-    template <class T> class ResourceContainer {
-    public:
-        uint32_t find(const std::string &key) const {
-#ifndef NDEBUG
-            if (look_up.find(key) == look_up.end()) {
-                std::cerr << "Unknown key: " << key << std::endl;
-                exit(-1);
-            }
-#endif
-            return look_up.at(key);
-        }
-
-        void add(const std::string &key, T &&item) {
-            if (auto it = look_up.find(key); it != look_up.end()) {
-                std::cout << "Add duplicated key: " << key << std::endl;
-                uint32_t id = it->second;
-                container[id] = std::move(item);
-            } else {
-                uint32_t id = (uint32_t)container.size();
-                container.emplace_back(std::move(item));
-                look_up[key] = id;
-            }
-        }
-
-        const T &get(uint32_t id) const { return container[id]; }
-
-        void clear() {
-            look_up.clear();
-            container.clear();
-        }
-
-    private:
-        std::unordered_map<std::string, uint32_t> look_up;
-        std::vector<T> container;
-    };
-
-    ResourceContainer<Mesh> meshes;
-    ResourceContainer<Material> materials;
-    ResourceContainer<Shader> shaders;
-    ResourceContainer<Texture> textures;
-    ResourceContainer<CubeMap> cubemaps;
-
-    std::vector<std::function<void()>> deconstructors;
-
-    void add_mesh(const std::string &key, const Vertex *vertices, size_t vertex_count, const uint16_t *const indices,
-                  size_t indices_count) {
-        std::cout << "Load mesh: " << key << std::endl;
-        unsigned int vao_id, ibo_id, vbo_id;
-        glGenVertexArrays(1, &vao_id);
-        glGenBuffers(1, &ibo_id);
-        glGenBuffers(1, &vbo_id);
-
-        glBindVertexArray(vao_id);
-
-        glBindBuffer(GL_ARRAY_BUFFER, vbo_id);
-        glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(Vertex), vertices, GL_STATIC_DRAW);
-
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_id);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices_count * sizeof(uint16_t), indices, GL_STATIC_DRAW);
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, position));
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, normal));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, tangent));
-        glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, uv));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-        glEnableVertexAttribArray(3);
-
-        checkError();
-
-        glBindVertexArray(0);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-        meshes.add(key, Mesh{vao_id, (uint32_t)indices_count});
-
-        deconstructors.emplace_back([vao_id, vbo_id, ibo_id]() {
-            glDeleteVertexArrays(1, &vao_id);
-            glDeleteBuffers(1, &vbo_id);
-            glDeleteBuffers(1, &ibo_id);
-            checkError();
-        });
-    }
-
-    void add_mesh(const std::string &key, const std::vector<Vertex> &vertices, const std::vector<uint16_t> &indices) {
-        add_mesh(key, vertices.data(), vertices.size(), indices.data(), indices.size());
-    }
-
-    void add_material(const std::string &key, const MaterialDesc &desc) {
-        std::cout << "Load material: " << key << std::endl;
-        Material mat;
-        mat.shaderprogram_id = shaders.get(shaders.find(desc.shader_name)).program_id;
-        for (const auto &u : desc.uniforms) {
-            unsigned int buffer_id;
-            glGenBuffers(1, &buffer_id);
-            glBindBuffer(GL_UNIFORM_BUFFER, buffer_id);
-            glBufferData(GL_UNIFORM_BUFFER, u.size, u.data, GL_STATIC_DRAW);
-            glBindBuffer(GL_UNIFORM_BUFFER, 0);
-
-            mat.uniforms.emplace_back(Material::UniformData{u.binding_id, buffer_id});
-
-            deconstructors.emplace_back([buffer_id]() { glDeleteBuffers(1, &buffer_id); });
-        }
-        for (const auto &s : desc.samplers) {
-            mat.samplers.emplace_back(
-                Material::SampleData{s.binding_id, textures.get(textures.find(s.texture_key)).texture_id});
-        }
-
-        materials.add(key, std::move(mat));
-    }
-
-    void add_texture(const std::string &key, const std::string &image_path, bool is_normal = false) {
-        std::cout << "Load texture: " << key << std::endl;
-
-        FIBITMAP *pImage = freeimage_load_and_convert_image(image_path, is_normal);
-
-        unsigned int nWidth = FreeImage_GetWidth(pImage);
-        unsigned int nHeight = FreeImage_GetHeight(pImage);
-
-        unsigned int texture_id;
-        glGenTextures(1, &texture_id);
-        glBindTexture(GL_TEXTURE_2D, texture_id);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, nWidth, nHeight, 0, GL_BGR, GL_UNSIGNED_BYTE,
-                     (void *)FreeImage_GetBits(pImage));
-        glGenerateTextureMipmap(texture_id);
-
-        checkError();
-
-        FreeImage_Unload(pImage);
-
-        glBindTexture(GL_TEXTURE_2D, 0);
-
-        textures.add(key, Texture{texture_id});
-
-        deconstructors.emplace_back([texture_id]() { glDeleteTextures(1, &texture_id); });
-    }
-
-    void add_cubemap(const std::string &key, const std::string &image_px, const std::string &image_nx,
-                     const std::string &image_py, const std::string &image_ny, const std::string &image_pz,
-                     const std::string &image_nz) {
-        std::cout << "Load skybox: " << key << std::endl;
-
-        // GL_TEXTURE_CUBE_MAP_POSITIVE_X
-        // GL_TEXTURE_CUBE_MAP_NEGATIVE_X
-        // GL_TEXTURE_CUBE_MAP_POSITIVE_Y
-        // GL_TEXTURE_CUBE_MAP_NEGATIVE_Y
-        // GL_TEXTURE_CUBE_MAP_POSITIVE_Z
-        // GL_TEXTURE_CUBE_MAP_NEGATIVE_Z
-        std::array<const std::string *, 6> textures_faces{
-            &image_px, &image_nx, &image_py, &image_ny, &image_pz, &image_nz,
-        };
-
-        unsigned int texture_id;
-        glGenTextures(1, &texture_id);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, texture_id);
-
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-        for (unsigned int i = 0; i < textures_faces.size(); i++) {
-            FIBITMAP *pImage = freeimage_load_and_convert_image(*textures_faces[i]);
-
-            unsigned int nWidth = FreeImage_GetWidth(pImage);
-            unsigned int nHeight = FreeImage_GetHeight(pImage);
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, nWidth, nHeight, 0, GL_BGR, GL_UNSIGNED_BYTE,
-                         (void *)FreeImage_GetBits(pImage));
-
-            FreeImage_Unload(pImage);
-        }
-        glGenerateTextureMipmap(texture_id);
-
-        glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
-
-        cubemaps.add(key, CubeMap{texture_id});
-
-        deconstructors.emplace_back([texture_id] { glDeleteTextures(1, &texture_id); });
-    }
-
-    void add_shader(const std::string &key, const std::string &vs_path, const std::string &ps_path) {
-        std::cout << "Load shader: " << key << std::endl;
-        unsigned int program_id = complie_shader_program(vs_path, ps_path);
-
-        shaders.add(key, Shader{program_id});
-
-        deconstructors.emplace_back([program_id]() { glDeleteProgram(program_id); });
-    }
-
-    void load_gltf(const std::string &base_key, const std::string &path) {
-        std::string root = path;
-        for (; !(root.empty() || root.back() == '/' || root.back() == '\\'); root.pop_back())
-            ;
-        using Json = SimpleJson::JsonObject;
-        Json json = SimpleJson::parse_file(path);
-
-        struct Buffer {
-            char *ptr = nullptr;
-            size_t len;
-            Buffer(size_t len) : ptr(new char[len]), len(len) {}
-            ~Buffer() {
-                if (ptr != nullptr) {
-                    delete[] ptr;
-                }
-            }
-        };
-        std::vector<Buffer> buffers;
-        if (json.has("buffers")) {
-            for (const Json &buffer : json["buffers"].get_list()) {
-                std::string bin_path = root + buffer["uri"].get_string();
-                Buffer &b = buffers.emplace_back((size_t)buffer["byteLength"].get_number());
-                FILE *read;
-                if (fopen_s(&read, bin_path.c_str(), "rb") != 0) {
-                    std::cerr << "Falied to read file: " << bin_path << std::endl;
-                    exit(-1);
-                }
-                fread((char *)b.ptr, 1, b.len, read);
-                fclose(read);
-            }
-        }
-        auto get_buffer = [&](uint64_t accessor_id) -> const Json & {
-            const Json &buffer_view = json["bufferViews"][json["accessors"][accessor_id]["bufferView"].get_uint()];
-            return buffer_view;
-        };
-        // 加载网格
-        if (json.has("meshes")) {
-            for (const Json &mesh : json["meshes"].get_list()) {
-                const std::string &key = base_key + '.' + mesh["name"].get_string();
-                const Json &primitive = mesh["primitives"][0];
-                const Json &indices_buffer = get_buffer(primitive["indices"].get_uint());
-                const Json &position_buffer = get_buffer(primitive["attributes"]["POSITION"].get_uint());
-                const Json &normal_buffer = get_buffer(primitive["attributes"]["NORMAL"].get_uint());
-                const Json &uv_buffer = get_buffer(primitive["attributes"]["TEXCOORD_0"].get_uint());
-                const Json &tangent_buffer = get_buffer(primitive["attributes"]["TANGENT"].get_uint());
-
-                uint32_t indices_count = json["accessors"][primitive["indices"].get_uint()]["count"].get_uint();
-                uint16_t *indices_ptr = (uint16_t *)((char *)buffers[indices_buffer["buffer"].get_uint()].ptr +
-                                                     indices_buffer["byteOffset"].get_uint());
-
-                uint32_t vertex_count = position_buffer["byteLength"].get_uint() / sizeof(Vector3f);
-                uint32_t normal_count = normal_buffer["byteLength"].get_uint() / sizeof(Vector3f);
-                uint32_t uv_count = uv_buffer["byteLength"].get_uint() / sizeof(Vector2f);
-                uint32_t tangent_count = tangent_buffer["byteLength"].get_uint() / sizeof(Vector4f);
-                assert(vertex_count == normal_count && vertex_count == uv_count && vertex_count == tangent_count);
-                Vector3f *pos = (Vector3f *)((char *)buffers[position_buffer["buffer"].get_uint()].ptr +
-                                             position_buffer["byteOffset"].get_uint());
-                Vector3f *normal = (Vector3f *)((char *)buffers[normal_buffer["buffer"].get_uint()].ptr +
-                                                normal_buffer["byteOffset"].get_uint());
-                Vector2f *uv = (Vector2f *)((char *)buffers[uv_buffer["buffer"].get_uint()].ptr +
-                                            uv_buffer["byteOffset"].get_uint());
-                Vector4f *tangent = (Vector4f *)((char *)buffers[tangent_buffer["buffer"].get_uint()].ptr +
-                                                 tangent_buffer["byteOffset"].get_uint());
-
-                std::vector<Vertex> vertices(vertex_count);
-                for (uint32_t i = 0; i < vertex_count; i++) {
-                    // tangent的第四个分量是用来根据平台决定手性的，在opengl中始终应该取1，所以忽略
-                    Vector3f tang = Vector3f(tangent[i].x, tangent[i].y, tangent[i].z);
-                    vertices[i] = {pos[i], normal[i], tang, uv[i]};
-                }
-
-                add_mesh(key, vertices.data(), vertices.size(), indices_ptr, indices_count);
-            }
-        }
-        // 加载纹理（在加载材质时加载需要的纹理）
-        auto load_texture = [&](size_t index, bool is_normal = false) -> std::string {
-            const Json &texture = json["images"][index];
-            const std::string key = base_key + '.' + texture["name"].get_string();
-            add_texture(key, root + texture["uri"].get_string(), is_normal);
-            return key;
-        };
-
-        // 加载材质
-        if (json.has("materials")) {
-            for (const Json &material : json["materials"].get_list()) {
-                const std::string &key = base_key + '.' + material["name"].get_string();
-
-                std::string normal_texture = "default_normal";
-                if (material.has("normalTexture")) {
-                    normal_texture = load_texture(material["normalTexture"]["index"].get_uint(), true);
-                }
-                const std::string basecolor_texture =
-                    load_texture(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
-                std::string metallic_roughness_texture = "white";
-                if (material["pbrMetallicRoughness"].has("metallicRoughnessTexture")) {
-                    metallic_roughness_texture =
-                        load_texture(material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
-                }
-
-                float metallicFactor = 1.0f;
-                if (material["pbrMetallicRoughness"].has("metallicFactor")) {
-                    metallicFactor = (float)material["pbrMetallicRoughness"]["metallicFactor"].get_number();
-                }
-                float roughnessFactor = 1.0f;
-                if (material["pbrMetallicRoughness"].has("roughnessFactor")) {
-                    roughnessFactor = (float)material["pbrMetallicRoughness"]["roughnessFactor"].get_number();
-                }
-                float uniform_data[2] = {metallicFactor, roughnessFactor};
-
-                MaterialDesc desc = {"pbr",
-                                     {{2, sizeof(float) * 2, &uniform_data}},
-                                     {{0, basecolor_texture}, {1, normal_texture}, {2, metallic_roughness_texture}}};
-
-                add_material(key, desc);
-            }
-        }
-    }
-
-    void load_json(const std::string &path) {
-        SimpleJson::JsonObject json = SimpleJson::parse_file(path);
-        std::string base_dir;
-        if (size_t it = path.find_last_of("/\\"); it != std::string::npos) {
-            base_dir = path.substr(0, it + 1); // 包含'/'
-        } else {
-            base_dir = ""; // 可能在同一目录下
-        }
-
-        if (json.has("shader")) {
-            for (const auto &[key, shader_desc] : json["shader"].get_map()) {
-                add_shader(key, base_dir + shader_desc["vs_path"].get_string(),
-                           base_dir + shader_desc["ps_path"].get_string());
-            }
-        }
-
-        if (json.has("texture")) {
-            for (const auto &[key, texture_desc] : json["texture"].get_map()) {
-                bool is_normal = texture_desc.has("is_normal") && texture_desc["is_normal"].get_bool();
-                add_texture(key, base_dir + texture_desc["image"].get_string(), is_normal);
-            }
-        }
-
-        if (json.has("cubemap")) {
-            for (const auto &[key, cubemap_desc] : json["cubemap"].get_map()) {
-                add_cubemap(key, base_dir + cubemap_desc["px"].get_string(), base_dir + cubemap_desc["nx"].get_string(),
-                            base_dir + cubemap_desc["py"].get_string(), base_dir + cubemap_desc["ny"].get_string(),
-                            base_dir + cubemap_desc["pz"].get_string(), base_dir + cubemap_desc["nz"].get_string());
-            }
-        }
-
-        if (json.has("gltf")) {
-            for (const auto &[key, gltf_desc] : json["gltf"].get_map()) {
-                load_gltf(key, base_dir + gltf_desc["path"].get_string());
-            }
-        }
-    }
-
-    void clear() {
-        meshes.clear();
-        materials.clear();
-        shaders.clear();
-        cubemaps.clear();
-        textures.clear();
-        for (auto &de : deconstructors) {
-            de();
-        }
-        deconstructors.clear();
-    }
-} resources;
 
 struct GameObjectPart {
     uint32_t mesh_id;
@@ -833,12 +294,11 @@ public:
     virtual void run() override;
 
 private:
+    static constexpr unsigned int POINTLIGNT_MAX = 8;
     struct PointLightData final {
         alignas(16) Vector3f position;  // 0
         alignas(16) Vector3f intensity; // 4
     };
-
-#define POINTLIGNT_MAX 8
     struct PerFrameData final {
         Matrix view_perspective_matrix;
         alignas(16) Vector3f ambient_light; // 3 * 4 + 4
@@ -876,6 +336,7 @@ public:
     }
     virtual void run() override;
 private:
+    const static unsigned int SKYBOX_TEXTURE_BINDIGN = 5;
     struct SkyBoxData final {
         Matrix skybox_view_perspective_matrix;
     };
@@ -1032,15 +493,13 @@ private:
     const std::string name;
 };
 
-#define POINTLIGNT_MAX 8
-
 class World {
 public:
     Camera camera;
     Clock clock;
 
     Vector3f ambient_light = {0.02f, 0.02f, 0.02f}; // 环境光
-    PointLight pointlights[POINTLIGNT_MAX];         // 点光源
+    std::vector<PointLight> pointlights;         // 点光源
     bool is_light_dirty = true;
 
     float fog_min_distance = 5.0f; // 雾开始的距离
@@ -1159,14 +618,13 @@ void LambertianPass::run() {
     // 灯光参数
     if (world.is_light_dirty) {
         data->ambient_light = world.ambient_light;
-        uint32_t count = 0;
-        for (const PointLight &l : world.pointlights) {
-            if (l.enabled) {
-                PointLightData &d = data->pointlight_list[count];
-                d.position = l.position;
-                d.intensity = l.color * l.factor;
-                count++;
-            }
+        if (world.pointlights.size() > POINTLIGNT_MAX) {
+            std::cout << "超出最大点光源数量" << std::endl;
+        }
+        uint32_t count = std::min<uint32_t>(world.pointlights.size(), POINTLIGNT_MAX);
+        for (uint32_t i = 0; i < count; ++i) {
+            data->pointlight_list[i].position = world.pointlights[i].position;
+            data->pointlight_list[i].intensity = world.pointlights[i].color * world.pointlights[i].factor;
         }
         data->pointlight_num = count;
         world.is_light_dirty = false;
@@ -1196,8 +654,6 @@ void LambertianPass::run() {
     }
 }
 
-#define SKYBOX_COLOR_BINDING 5
-
 // 渲染天空盒
 void SkyBoxPass::run() {
     glEnable(GL_CULL_FACE);  // 启用面剔除
@@ -1214,7 +670,7 @@ void SkyBoxPass::run() {
     // 绑定uniform buffer
     glBindBufferBase(GL_UNIFORM_BUFFER, 0, skybox_uniform.get_id());
     // 绑定天空盒纹理
-    glActiveTexture(GL_TEXTURE0 + SKYBOX_COLOR_BINDING);
+    glActiveTexture(GL_TEXTURE0 + SKYBOX_TEXTURE_BINDIGN);
     assert(skybox_texture_id != 0); // 天空纹理必须存在
     glBindTexture(GL_TEXTURE_CUBE_MAP, skybox_texture_id);
     // 获取天空盒的网格（向内的Cube）
@@ -1377,10 +833,8 @@ void load_scene_from_json(const std::string &path) {
     }
     // 加载点光源
     if (json.has("pointlights")) {
-        size_t light_index = 0;
         for (const SimpleJson::JsonObject &pointlight_desc : json["pointlights"].get_list()) {
-            PointLight &light = world.pointlights[light_index++];
-            light.enabled = true;
+            PointLight &light = world.pointlights.emplace_back();
             light.position = load_vec3(pointlight_desc["position"]);
             light.color = load_vec3(pointlight_desc["color"]);
             light.factor = (float)pointlight_desc["factor"].get_number();
@@ -1454,8 +908,6 @@ void World::tick() {
     renderer.skybox_pass->set_skybox(skybox.color_texture_id);
 }
 
-#define MY_TITLE "2020270901005 homework 3"
-
 void loop_func() {
     world.tick();
     renderer.render();
@@ -1480,15 +932,15 @@ public:
         static bool is_right_button_down = false;
 
         if (!is_left_button_down && input.is_left_button_down()) {
-            world.pointlights[0].enabled = false;
-            world.pointlights[1].enabled = false;
-            world.is_light_dirty = true;
+            // world.pointlights[0].enabled = false;
+            // world.pointlights[1].enabled = false;
+            // world.is_light_dirty = true;
         }
 
         if (!is_right_button_down && input.is_right_button_down()) {
-            world.pointlights[0].enabled = true;
-            world.pointlights[1].enabled = true;
-            world.is_light_dirty = true;
+            // world.pointlights[0].enabled = true;
+            // world.pointlights[1].enabled = true;
+            // world.is_light_dirty = true;
         }
 
         if (input.is_middle_button_down()) {
@@ -1569,9 +1021,6 @@ public:
 private:
     std::shared_ptr<GObject> ball;
 };
-
-#define INIT_WINDOW_WIDTH 1080
-#define INIT_WINDOW_HEIGHT 720
 
 int main(int argc, char **argv) {
     // 初始化glut和创建窗口

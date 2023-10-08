@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <cmath>
 #include <assert.h>
 
 inline float Q_rsqrt(float number) {
