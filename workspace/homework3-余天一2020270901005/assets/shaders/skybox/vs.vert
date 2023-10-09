@@ -14,5 +14,6 @@ out VS_OUT
 void main()
 {
     vs_out.world_pos = position;
-    gl_Position = view_perspective_matrix * vec4(position, 1.0f);
+    vec4 pos = view_perspective_matrix * vec4(position, 1.0f);
+    gl_Position = pos.xyww;// 相当于z = w， 欺骗一下深度测试 https://www.jianshu.com/p/ad691b3ea9d5
 }

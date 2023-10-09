@@ -15,6 +15,8 @@
 #include "Sjson.h"
 #include "RenderResource.h"
 #include "utils.h"
+#include "GObject.h"
+#include "Renderer.h"
 
 #include <FreeImage.h>
 
@@ -132,333 +134,6 @@ void handle_mouse_click(int button, int state, int x, int y) {
     }
 }
 
-struct GameObjectPart {
-    uint32_t mesh_id;
-    uint32_t material_id;
-    uint32_t topology;
-    Matrix model_matrix;
-    Matrix normal_matrix;
-
-    GameObjectPart(const std::string &mesh_name, const std::string &material_name,
-                   const uint32_t topology = GL_TRIANGLES,
-                   const Transform &transform = {{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}})
-        : mesh_id(resources.meshes.find(mesh_name)), material_id(resources.materials.find(material_name)),
-          topology(topology), model_matrix(transform.transform_matrix()), normal_matrix(transform.normal_matrix()) {}
-    
-    //在遍历节点树时计算和填写
-    Matrix base_transform;
-    Matrix base_normal_matrix;
-};
-
-struct GObjectDesc {
-    Transform transform;
-    std::vector<GameObjectPart> parts;
-};
-
-class GObject final : public std::enable_shared_from_this<GObject> {
-public:
-    std::string name;
-    Transform transform;
-
-    Matrix relate_model_matrix;
-    Matrix relate_normal_matrix;
-    bool is_relat_dirty = true;
-
-    GObject(const std::string name = "") : name(name){};
-    GObject(GObjectDesc &&desc, const std::string name = "")
-        : name(name), transform(desc.transform), parts(std::move(desc.parts)){};
-
-    void add_part(const GameObjectPart &part) {
-        GameObjectPart &p = parts.emplace_back(part);
-        p.base_transform = relate_model_matrix * p.model_matrix;
-        p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
-    }
-
-    std::vector<GameObjectPart> &get_parts() { return parts; }
-
-    ~GObject() {
-        assert(!parent.lock()); // 必须没有父节点
-    };
-
-    void set_transform(const Transform &transform) {
-        this->transform = transform;
-        is_relat_dirty = true;
-    }
-
-    const std::vector<std::shared_ptr<GObject>> &get_children() const { return children; }
-    std::shared_ptr<GObject> get_child_by_name(const std::string name) {
-        if (name.empty())
-            return nullptr;
-        for (auto &child : children) {
-            if (child->name == name) {
-                return child;
-            }
-        }
-        return nullptr;
-    }
-
-    void attach_child(std::shared_ptr<GObject> child) {
-        children.push_back(child);
-        child->parent = weak_from_this();
-    }
-
-    void remove_child(GObject *child) {
-        auto it =
-            std::find_if(children.begin(), children.end(), [child](const auto &c) -> bool { return c.get() == child; });
-        if (it != children.end()) {
-            (*it)->parent.reset();
-            children.erase(it);
-        } else {
-            assert(false); // 试图移除不存在的子节点
-        }
-    }
-
-    bool has_parent() const { return !parent.expired(); }
-
-    std::weak_ptr<GObject> get_parent() { return parent; }
-
-    void attach_parent(GObject *new_parent) {
-        if (new_parent == parent.lock().get())
-            return;
-        if (auto old_parent = parent.lock(); old_parent) {
-            old_parent->remove_child(this);
-        }
-        if (new_parent != nullptr) {
-            new_parent->attach_child(shared_from_this());
-        }
-    }
-
-private:
-    std::vector<GameObjectPart> parts;
-    std::weak_ptr<GObject> parent;
-    std::vector<std::shared_ptr<GObject>> children;
-};
-
-// 一个可写的uniform buffer对象的封装
-template <class T> struct WritableUniformBuffer {
-    // 在初始化opengl后才能初始化
-    WritableUniformBuffer() {
-        assert(id == 0);
-        glGenBuffers(1, &id);
-        glBindBuffer(GL_UNIFORM_BUFFER, id);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(T), nullptr, GL_DYNAMIC_DRAW);
-    }
-
-    T *map() {
-        void *ptr = glMapNamedBuffer(id, GL_WRITE_ONLY);
-        assert(ptr != nullptr);
-        return (T *)ptr;
-    }
-    void unmap() {
-        bool ret = glUnmapNamedBuffer(id);
-        assert(ret);
-    }
-
-    void bind(unsigned int binding_point){
-        glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, id);
-    }
-
-    ~WritableUniformBuffer(){
-        glDeleteBuffers(1, &id);
-    }
-
-private:
-    unsigned int id = 0;
-};
-
-class Pass{
-public:
-    virtual void run() = 0;
-    friend class Renderer;
-};
-
-class LambertianPass : public Pass {
-public:
-    void accept(GameObjectPart* part){
-        parts.push_back(part);
-    }
-
-    void reset() {
-        parts.clear();
-    }
-
-    virtual void run() override;
-
-private:
-    static constexpr unsigned int POINTLIGNT_MAX = 8;
-    struct PointLightData final {
-        alignas(16) Vector3f position;
-        alignas(16) Vector3f intensity;
-    };
-    struct PerFrameData final {
-        Matrix view_perspective_matrix;
-        alignas(16) Vector3f ambient_light;
-        alignas(16) Vector3f camera_position;
-        alignas(4) float fog_min_distance;
-        alignas(4) float fog_density;
-        alignas(4) uint32_t pointlight_num;
-        PointLightData pointlight_list[POINTLIGNT_MAX];
-    };
-
-    struct PerObjectData final{
-        Matrix model_matrix;
-        Matrix normal_matrix;
-    };
-
-    std::vector<GameObjectPart*> parts; // 记录要渲染的对象
-    WritableUniformBuffer<PerFrameData> per_frame_uniform;   // 用于一般渲染每帧变化的数据
-    WritableUniformBuffer<PerObjectData> per_object_uniform; // 用于一般渲染每个物体不同的数据
-};
-
-class SkyBoxPass : public Pass{
-public:
-    SkyBoxPass(){
-        shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
-        mesh_id = resources.meshes.find("skybox_cube");
-    }
-
-    void set_skybox(unsigned int texture_id) {
-        skybox_texture_id = texture_id;
-    }
-    virtual void run() override;
-private:
-    const static unsigned int SKYBOX_TEXTURE_BINDIGN = 5;
-    struct SkyBoxData final {
-        Matrix skybox_view_perspective_matrix;
-    };
-
-    //每帧更新
-    WritableUniformBuffer<SkyBoxData> skybox_uniform;
-    unsigned int skybox_texture_id = 0;
-    //初始化时设定
-    unsigned int shader_program_id;
-    uint32_t mesh_id;
-};
-
-class PickupPass : public Pass {
-public:
-    PickupPass(){
-        // 初始化pickup用的framebuffer
-        glGenRenderbuffers(1, &framebuffer_pickup_rbo);
-        glBindRenderbuffer(GL_RENDERBUFFER, framebuffer_pickup_rbo);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-
-        // 完整的初始化推迟到使用的时候
-        checkError();
-
-        glGenFramebuffers(1, &framebuffer_pickup);
-        glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_pickup);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, framebuffer_pickup_rbo);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        checkError();
-    }
-
-    virtual void run() override;
-
-    ~PickupPass(){
-        glDeleteRenderbuffers(1, &framebuffer_pickup_rbo);
-        glDeleteFramebuffers(1, &framebuffer_pickup);
-    }
-private:
-    unsigned int framebuffer_pickup;
-    unsigned int framebuffer_pickup_rbo;
-
-    // 设置framebuffer大小，显然要和视口一样大
-    void set_framebuffer_size(unsigned int width, unsigned int height) {
-        glNamedRenderbufferStorage(framebuffer_pickup_rbo, GL_R32UI, width, height);
-        checkError();
-        assert(glCheckNamedFramebufferStatus(framebuffer_pickup, GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE);
-    }
-};
-
-class Renderer final{
-public:
-    struct Viewport {
-        GLint x;
-        GLint y;
-        GLsizei width;
-        GLsizei height;
-    } main_viewport; // 主视口
-
-    // passes
-    std::unique_ptr<LambertianPass> lambertian_pass;
-    std::unique_ptr<SkyBoxPass> skybox_pass;
-    std::unique_ptr<PickupPass> pickup_pass;
-
-    void init() {
-        lambertian_pass = std::make_unique<LambertianPass>();
-        skybox_pass = std::make_unique<SkyBoxPass>();
-        pickup_pass = std::make_unique<PickupPass>();
-    }
-
-    void accept(GameObjectPart* part){
-        lambertian_pass->accept(part);
-    }
-
-    void render(){
-        lambertian_pass->run();
-        skybox_pass->run();
-        //pickup_pass->run();
-
-        lambertian_pass->reset();
-        glutSwapBuffers(); // 渲染完毕，交换缓冲区，显示新一帧的画面
-        checkError();
-    }
-
-    void set_viewport(GLint x, GLint y, GLsizei width, GLsizei height);
-
-    void clear() {
-        lambertian_pass.reset();
-        skybox_pass.reset();
-        pickup_pass.reset();
-    }
-} renderer;
-
-struct Camera {
-public:
-    Camera() {
-        position = {0.0f, 0.0f, 0.0f};
-        rotation = {0.0f, 0.0f, 0.0f};
-        fov = 1.57f;
-        near_z = 1.0f;
-        far_z = 1000.0f;
-    }
-
-    Vector3f position;
-    Vector3f rotation; // zxy
-    float aspect;
-    float fov, near_z, far_z;
-
-    // 获取目视方向
-    Vector3f get_orientation() const {
-        float pitch = rotation[1];
-        float yaw = rotation[2];
-        return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
-    }
-
-    Vector3f get_up_direction() const {
-        float sp = sinf(rotation[1]);
-        float cp = cosf(rotation[1]);
-        float cr = cosf(rotation[0]);
-        float sr = sinf(rotation[0]);
-        float sy = sinf(rotation[2]);
-        float cy = cosf(rotation[2]);
-
-        return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
-    }
-
-    // 用于一般物体的变换矩阵
-    Matrix get_view_perspective_matrix() const {
-        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
-               Matrix::translate(-position);
-    }
-    // 用于天空盒的变换矩阵
-    Matrix get_skybox_view_perspective_matrix() const {
-        return compute_perspective_matrix(aspect, fov, near_z, far_z) * Matrix::rotate(rotation).transpose() *
-               Matrix::scale({far_z / 2, far_z / 2, far_z / 2});
-    }
-};
-
 struct SkyBox {
     unsigned int color_texture_id;
 };
@@ -550,7 +225,6 @@ private:
 
 void Renderer::set_viewport(GLint x, GLint y, GLsizei width, GLsizei height) {
     main_viewport = {x, y, width, height};
-    world.camera.aspect = float(width) / float(height);
 }
 
 void setup_opengl() {
@@ -571,7 +245,7 @@ void setup_opengl() {
     glClearColor(0.0, 0.0, 0.0, 0.0);
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW); // 逆时针的面为正面
-    glDepthFunc(GL_LESS);
+    glDepthFunc(GL_LEQUAL); // 在z = 1.0时，深度测试结果为true
 
     checkError();
 }
@@ -590,11 +264,18 @@ void LambertianPass::run() {
     // 绑定per_frame和per_object uniform buffer
     per_frame_uniform.bind(0);
     per_object_uniform.bind(1);
-    
+
+    // 计算透视投影矩阵
+    const float aspect = float(v.width) / float(v.height);
+    const Camera &camera = renderer.main_camera;
+    const Matrix view_perspective_matrix =
+        compute_perspective_matrix(aspect, camera.fov, camera.near_z, camera.far_z) *
+        Matrix::rotate(camera.rotation).transpose() * Matrix::translate(-camera.position);
+
     // 填充per_frame uniform数据
     auto data = per_frame_uniform.map();
     // 透视投影矩阵
-    data->view_perspective_matrix = world.camera.get_view_perspective_matrix().transpose();
+    data->view_perspective_matrix = view_perspective_matrix.transpose();
     // 相机位置
     data->camera_position = world.camera.position;
     // 雾参数
@@ -646,9 +327,16 @@ void SkyBoxPass::run() {
     glEnable(GL_DEPTH_TEST); // 启用深度测试
     glDrawBuffer(GL_BACK);   // 渲染到后缓冲区
 
+    // 用于天空盒的投影矩阵
+    const float aspect = float(renderer.main_viewport.width) / float(renderer.main_viewport.height);
+    const Camera &camera = renderer.main_camera;
+    const Matrix skybox_view_perspective_matrix =
+        compute_perspective_matrix(aspect, camera.fov, camera.near_z, camera.far_z) *
+        Matrix::rotate(camera.rotation).transpose();
+
     // 填充天空盒需要的参数（透视投影矩阵）
     auto data = skybox_uniform.map();
-    data->skybox_view_perspective_matrix = world.camera.get_skybox_view_perspective_matrix().transpose();
+    data->skybox_view_perspective_matrix = skybox_view_perspective_matrix.transpose();
     skybox_uniform.unmap();
 
     // 绑定天空盒专用着色器
@@ -889,6 +577,8 @@ void World::tick() {
     }
     // 递归更新所有物体
     walk_gobject(this->root.get(), 0);
+
+    renderer.main_camera = camera;
 
     //上传天空盒
     renderer.skybox_pass->set_skybox(skybox.color_texture_id);

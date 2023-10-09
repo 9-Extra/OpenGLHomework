@@ -1,10 +1,11 @@
 #include "RenderResource.h"
 
+#include <GL/glew.h>
+#include <GL/glut.h>
 #include <array>
 
 #include "Sjson.h"
 #include "utils.h"
-#include "windows.h"
 #include <FreeImage.h>
 
 std::string read_whole_file(const std::string &path);
@@ -379,4 +380,17 @@ void RenderReousce::add_mesh(const std::string &key, const Vertex *vertices, siz
         glDeleteBuffers(1, &ibo_id);
         checkError();
     });
+}
+void Material::bind() const {
+    glUseProgram(shaderprogram_id); // 绑定此材质关联的着色器
+
+    // 绑定材质的uniform buffer
+    for (const UniformData &u : uniforms) {
+        glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
+    }
+    // 绑定所有纹理
+    for (const SampleData &s : samplers) {
+        glActiveTexture(GL_TEXTURE0 + s.binding_id);
+        glBindTexture(GL_TEXTURE_2D, s.texture_id);
+    }
 }

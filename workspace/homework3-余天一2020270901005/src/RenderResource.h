@@ -1,7 +1,5 @@
 #pragma once
 
-#include <GL/glew.h>
-#include <GL/glut.h>
 #include <string>
 #include <iostream>
 #include <vector>
@@ -21,6 +19,40 @@ struct Transform {
     }
     Matrix normal_matrix() const {
         return Matrix::rotate(rotation) * Matrix::scale({1.0f / scale.x, 1.0f / scale.y, 1.0f / scale.z});
+    }
+};
+
+struct Camera {
+public:
+    Camera() {
+        position = {0.0f, 0.0f, 0.0f};
+        rotation = {0.0f, 0.0f, 0.0f};
+        near_z = 1.0f;
+        far_z = 1000.0f;
+        fov = 1.57;
+    }
+
+    Vector3f position;
+    Vector3f rotation; // zxy
+    float fov;
+    float near_z, far_z;
+
+    // 获取目视方向
+    Vector3f get_orientation() const {
+        float pitch = rotation[1];
+        float yaw = rotation[2];
+        return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
+    }
+
+    Vector3f get_up_direction() const {
+        float sp = sinf(rotation[1]);
+        float cp = cosf(rotation[1]);
+        float cr = cosf(rotation[0]);
+        float sr = sinf(rotation[0]);
+        float sy = sinf(rotation[2]);
+        float cy = cosf(rotation[2]);
+
+        return {-sp * sy * cr - sr * cy, cp * cr, sp * cr * cy - sr * sy};
     }
 };
 
@@ -90,19 +122,7 @@ struct Material {
     std::vector<UniformData> uniforms;
     std::vector<SampleData> samplers;
 
-    void bind() const {
-        glUseProgram(shaderprogram_id); // 绑定此材质关联的着色器
-
-        // 绑定材质的uniform buffer
-        for (const UniformData &u : uniforms) {
-            glBindBufferBase(GL_UNIFORM_BUFFER, u.binding_id, u.buffer_id);
-        }
-        // 绑定所有纹理
-        for (const SampleData &s : samplers) {
-            glActiveTexture(GL_TEXTURE0 + s.binding_id);
-            glBindTexture(GL_TEXTURE_2D, s.texture_id);
-        }
-    }
+    void bind() const;
 };
 
 struct Shader {
