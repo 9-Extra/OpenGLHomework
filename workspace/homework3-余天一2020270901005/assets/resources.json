@@ -23,7 +23,7 @@
     },
     "texture": {
         "default_normal": {
-            "is_normal": true,
+            "is_normal": false,
             "image": "textures/normal.jpg"
         },
         "white": {

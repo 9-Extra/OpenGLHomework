@@ -7,19 +7,8 @@
 #include <vector>
 #include <unordered_map>
 #include <functional>
-#include <array>
 
-#include "windows.h"
 #include "CGmath.h"
-#include "utils.h"
-#include "Sjson.h"
-#include <FreeImage.h>
-
-unsigned int complie_shader(const char *const src, unsigned int shader_type);
-unsigned int complie_shader_program(const std::string &vs_path, const std::string &ps_path);
-
-// 加载图像并预先进行反向gamma矫正
-FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path, bool is_normal = false);
 
 // 平移旋转缩放
 struct Transform {

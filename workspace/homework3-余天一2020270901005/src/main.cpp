@@ -237,7 +237,7 @@ private:
 // 一个可写的uniform buffer对象的封装
 template <class T> struct WritableUniformBuffer {
     // 在初始化opengl后才能初始化
-    void init() {
+    WritableUniformBuffer() {
         assert(id == 0);
         glGenBuffers(1, &id);
         glBindBuffer(GL_UNIFORM_BUFFER, id);
@@ -254,11 +254,12 @@ template <class T> struct WritableUniformBuffer {
         assert(ret);
     }
 
-    unsigned int get_id() const { return id; }
+    void bind(unsigned int binding_point){
+        glBindBufferBase(GL_UNIFORM_BUFFER, binding_point, id);
+    }
 
-    void clear() {
+    ~WritableUniformBuffer(){
         glDeleteBuffers(1, &id);
-        id = 0;
     }
 
 private:
@@ -273,16 +274,6 @@ public:
 
 class LambertianPass : public Pass {
 public:
-    LambertianPass() {
-        per_frame_uniform.init();
-        per_object_uniform.init();
-    }
-
-    ~LambertianPass(){
-        per_frame_uniform.clear();
-        per_object_uniform.clear();
-    }
-
     void accept(GameObjectPart* part){
         parts.push_back(part);
     }
@@ -296,20 +287,20 @@ public:
 private:
     static constexpr unsigned int POINTLIGNT_MAX = 8;
     struct PointLightData final {
-        alignas(16) Vector3f position;  // 0
-        alignas(16) Vector3f intensity; // 4
+        alignas(16) Vector3f position;
+        alignas(16) Vector3f intensity;
     };
     struct PerFrameData final {
         Matrix view_perspective_matrix;
-        alignas(16) Vector3f ambient_light; // 3 * 4 + 4
+        alignas(16) Vector3f ambient_light;
         alignas(16) Vector3f camera_position;
         alignas(4) float fog_min_distance;
         alignas(4) float fog_density;
-        alignas(4) uint32_t pointlight_num; // 4
+        alignas(4) uint32_t pointlight_num;
         PointLightData pointlight_list[POINTLIGNT_MAX];
     };
 
-    struct PerObjectData {
+    struct PerObjectData final{
         Matrix model_matrix;
         Matrix normal_matrix;
     };
@@ -324,13 +315,8 @@ public:
     SkyBoxPass(){
         shader_program_id = resources.shaders.get(resources.shaders.find("skybox")).program_id;
         mesh_id = resources.meshes.find("skybox_cube");
-
-        skybox_uniform.init();
     }
 
-    ~SkyBoxPass() {
-        skybox_uniform.clear();
-    }
     void set_skybox(unsigned int texture_id) {
         skybox_texture_id = texture_id;
     }
@@ -602,9 +588,9 @@ void LambertianPass::run() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     // 绑定per_frame和per_object uniform buffer
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, per_frame_uniform.get_id());
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, per_object_uniform.get_id());
-
+    per_frame_uniform.bind(0);
+    per_object_uniform.bind(1);
+    
     // 填充per_frame uniform数据
     auto data = per_frame_uniform.map();
     // 透视投影矩阵
@@ -668,7 +654,7 @@ void SkyBoxPass::run() {
     // 绑定天空盒专用着色器
     glUseProgram(shader_program_id);
     // 绑定uniform buffer
-    glBindBufferBase(GL_UNIFORM_BUFFER, 0, skybox_uniform.get_id());
+    skybox_uniform.bind(0);
     // 绑定天空盒纹理
     glActiveTexture(GL_TEXTURE0 + SKYBOX_TEXTURE_BINDIGN);
     assert(skybox_texture_id != 0); // 天空纹理必须存在
@@ -1058,8 +1044,8 @@ int main(int argc, char **argv) {
     // 注册在退出时执行的清理操作
     atexit([] {
         world.clear();
-        resources.clear();
         renderer.clear();
+        resources.clear();
         std::cout << "Exit!\n";
     });
 

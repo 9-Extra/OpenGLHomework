@@ -1,5 +1,12 @@
 #include "RenderResource.h"
 
+#include <array>
+
+#include "Sjson.h"
+#include "utils.h"
+#include "windows.h"
+#include <FreeImage.h>
+
 std::string read_whole_file(const std::string &path);
 
 RenderReousce resources; // Global
@@ -51,7 +58,7 @@ unsigned int complie_shader_program(const std::string &vs_path, const std::strin
 
     return shaderProgram;
 }
-FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path, bool is_normal) {
+FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path, bool is_color=true) {
     FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());
     if (pImage_ori == nullptr) {
         std::cerr << "Failed to load image: " << image_path << std::endl;
@@ -59,8 +66,8 @@ FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path, bool i
     }
     FIBITMAP *pImage = FreeImage_ConvertTo24Bits(pImage_ori);
     FreeImage_FlipVertical(pImage); // 翻转，适应opengl的方向
-    if (!is_normal) {
-        FreeImage_AdjustGamma(pImage, 1 / 2.2);
+    if (is_color) {
+        FreeImage_AdjustGamma(pImage, 1 / 2.2);// 对于颜色贴图，进行矫正
     }
     FreeImage_Unload(pImage_ori);
 
@@ -141,10 +148,10 @@ void RenderReousce::load_gltf(const std::string &base_key, const std::string &pa
         }
     }
     // 加载纹理（在加载材质时加载需要的纹理）
-    auto load_texture = [&](size_t index, bool is_normal = false) -> std::string {
+    auto load_texture = [&](size_t index, bool is_color) -> std::string {
         const Json &texture = json["images"][index];
         const std::string key = base_key + '.' + texture["name"].get_string();
-        add_texture(key, root + texture["uri"].get_string(), is_normal);
+        add_texture(key, root + texture["uri"].get_string(), is_color);
         return key;
     };
 
@@ -155,14 +162,14 @@ void RenderReousce::load_gltf(const std::string &base_key, const std::string &pa
 
             std::string normal_texture = "default_normal";
             if (material.has("normalTexture")) {
-                normal_texture = load_texture(material["normalTexture"]["index"].get_uint(), true);
+                normal_texture = load_texture(material["normalTexture"]["index"].get_uint(), false);
             }
             const std::string basecolor_texture =
-                load_texture(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint());
+                load_texture(material["pbrMetallicRoughness"]["baseColorTexture"]["index"].get_uint(), true);
             std::string metallic_roughness_texture = "white";
             if (material["pbrMetallicRoughness"].has("metallicRoughnessTexture")) {
                 metallic_roughness_texture =
-                    load_texture(material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint());
+                    load_texture(material["pbrMetallicRoughness"]["metallicRoughnessTexture"]["index"].get_uint(), false);
             }
 
             float metallicFactor = 1.0f;
@@ -201,8 +208,8 @@ void RenderReousce::load_json(const std::string &path) {
 
     if (json.has("texture")) {
         for (const auto &[key, texture_desc] : json["texture"].get_map()) {
-            bool is_normal = texture_desc.has("is_normal") && texture_desc["is_normal"].get_bool();
-            add_texture(key, base_dir + texture_desc["image"].get_string(), is_normal);
+            bool is_color = texture_desc.has("is_color") ? texture_desc["is_color"].get_bool() : true;
+            add_texture(key, base_dir + texture_desc["image"].get_string(), is_color);
         }
     }
 
@@ -282,10 +289,10 @@ void RenderReousce::add_cubemap(const std::string &key, const std::string &image
 
     deconstructors.emplace_back([texture_id] { glDeleteTextures(1, &texture_id); });
 }
-void RenderReousce::add_texture(const std::string &key, const std::string &image_path, bool is_normal) {
+void RenderReousce::add_texture(const std::string &key, const std::string &image_path, bool is_color) {
     std::cout << "Load texture: " << key << std::endl;
 
-    FIBITMAP *pImage = freeimage_load_and_convert_image(image_path, is_normal);
+    FIBITMAP *pImage = freeimage_load_and_convert_image(image_path, is_color);
 
     unsigned int nWidth = FreeImage_GetWidth(pImage);
     unsigned int nHeight = FreeImage_GetHeight(pImage);
