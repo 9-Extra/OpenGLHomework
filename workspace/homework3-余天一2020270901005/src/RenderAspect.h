@@ -7,6 +7,13 @@ struct Transform {
     Vector3f rotation;
     Vector3f scale;
 
+    // 获取目视方向
+    Vector3f get_orientation() const {
+        float pitch = rotation[1];
+        float yaw = rotation[2];
+        return {sinf(yaw) * cosf(pitch), sinf(pitch), -cosf(pitch) * cosf(yaw)};
+    }
+
     Matrix transform_matrix() const {
         return Matrix::translate(position) * Matrix::rotate(rotation) * Matrix::scale(scale);
     }

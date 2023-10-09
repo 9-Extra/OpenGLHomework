@@ -7,6 +7,7 @@
 #include <sstream>
 #include <vector>
 
+#include "CpntCamera.h"
 #include "winapi.h"
 #include "CGmath.h"
 #include "Sjson.h"
@@ -237,24 +238,21 @@ public:
         static bool is_right_button_down = false;
 
         if (!is_left_button_down && input.is_left_button_down()) {
-            // world.pointlights[0].enabled = false;
-            // world.pointlights[1].enabled = false;
-            // world.is_light_dirty = true;
+            lights->enable();
         }
 
         if (!is_right_button_down && input.is_right_button_down()) {
-            // world.pointlights[0].enabled = true;
-            // world.pointlights[1].enabled = true;
-            // world.is_light_dirty = true;
+            lights->disable();
         }
 
         if (input.is_middle_button_down()) {
             auto [dx, dy] = input.get_mouse_move().v;
             // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
             const float rotate_speed = 0.003f;
-            Camera &desc = world.camera;
-            desc.rotation.z += dx * rotate_speed;
-            desc.rotation.y -= dy * rotate_speed;
+            Vector3f& rotation = camera->transform.rotation;
+            rotation.z += dx * rotate_speed;
+            rotation.y -= dy * rotate_speed;
+            camera->is_relat_dirty = true;
         }
 
         is_left_button_down = input.is_left_button_down();
@@ -269,35 +267,41 @@ public:
             PostQuitMessage(0);
         }
         if (IS_KEYDOWN('W')) {
-            Vector3f ori = world.camera.get_orientation();
+            Vector3f ori = camera->transform.get_orientation();
             ori.y = 0.0;
-            world.camera.position += ori.normalize() * move_speed;
+            camera->transform.position += ori.normalize() * move_speed;
+            camera->is_relat_dirty = true;
         }
         if (IS_KEYDOWN('S')) {
-            Vector3f ori = world.camera.get_orientation();
+            Vector3f ori = camera->transform.get_orientation();
             ori.y = 0.0;
-            world.camera.position += ori.normalize() * -move_speed;
+            camera->transform.position += ori.normalize() * -move_speed;
+            camera->is_relat_dirty = true;
         }
         if (IS_KEYDOWN('A')) {
-            Vector3f ori = world.camera.get_orientation();
+            Vector3f ori = camera->transform.get_orientation();
             ori = {ori.z, 0.0, -ori.x};
-            world.camera.position += ori.normalize() * move_speed;
+            camera->transform.position += ori.normalize() * move_speed;
+            camera->is_relat_dirty = true;
         }
         if (IS_KEYDOWN('D')) {
-            Vector3f ori = world.camera.get_orientation();
+            Vector3f ori = camera->transform.get_orientation();
             ori = {ori.z, 0.0, -ori.x};
-            world.camera.position += ori.normalize() * -move_speed;
+            camera->transform.position += ori.normalize() * -move_speed;
+            camera->is_relat_dirty = true;
         }
         if (IS_KEYDOWN(VK_SPACE)) {
-            world.camera.position.y += move_speed;
+            camera->transform.position.y += move_speed;
+            camera->is_relat_dirty = true;
         }
         if (IS_KEYDOWN(VK_SHIFT)) {
-            world.camera.position.y -= move_speed;
+            camera->transform.position.y -= move_speed;
+            camera->is_relat_dirty = true;
         }
 
         if (IS_KEYDOWN('0')) {
-            world.camera.position = {0.0, 0.0, 0.0};
-            world.camera.rotation = {0.0, 0.0, 0.0};
+            camera->transform = Transform{{0.0, 0.0, 0.0}, {0.0, 0.0, 0.0}, {1, 1, 1}};
+            camera->is_relat_dirty = true;
         }
 
         if (IS_KEYDOWN(VK_UP)) {
@@ -312,7 +316,13 @@ public:
 
     void on_attach() override {
         ball = world.get_root()->get_child_by_name("球"); 
-        light = world.get_root()->get_child_by_name("light1");
+        assert(ball);
+        lights = world.get_root()->get_child_by_name("lights");
+        assert(lights);
+        light1 = world.get_root()->get_child_by_name("lights")->get_child_by_name("light1");
+        assert(light1);
+        camera = world.get_root()->get_child_by_name("相机");
+        assert(camera);
     }
 
     void tick() override {
@@ -322,13 +332,15 @@ public:
         ball->transform.rotation.x += world.clock.get_delta() * 0.001f;
         ball->transform.rotation.y += world.clock.get_delta() * 0.003f;
         ball->is_relat_dirty = true;
-        light->transform.position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
-        light->is_relat_dirty = true;
+        light1->transform.position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
+        light1->is_relat_dirty = true;
     }
 
 private:
     std::shared_ptr<GObject> ball;
-    std::shared_ptr<GObject> light;
+    std::shared_ptr<GObject> lights;
+    std::shared_ptr<GObject> light1;
+    std::shared_ptr<GObject> camera;
 };
 
 int main(int argc, char **argv) {

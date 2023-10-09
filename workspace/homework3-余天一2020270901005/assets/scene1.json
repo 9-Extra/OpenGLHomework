@@ -129,24 +129,29 @@
             }
         },
         {
-            "name": "light1",
-            "transform": {"position": [0, 0, 0]},
-            "components":{
-                "point_light": {
-                    "color": [1, 1, 1],
-                    "factor": 500
+            "name": "lights",
+            "children":[
+                {
+                    "name": "light1",
+                    "transform": {"position": [0, 0, 0]},
+                    "components":{
+                        "point_light": {
+                            "color": [1, 1, 1],
+                            "factor": 500
+                        }
+                    }
+                },
+                {
+                    "name": "light2",
+                    "transform": {"position": [0, 5, -20]},
+                    "components":{
+                        "point_light": {
+                            "color": [1, 0.6, 0.6],
+                            "factor": 1000
+                        }
+                    }
                 }
-            }
-        },
-        {
-            "name": "light2",
-            "transform": {"position": [0, 5, -20]},
-            "components":{
-                "point_light": {
-                    "color": [1, 0.6, 0.6],
-                    "factor": 1000
-                }
-            }
+            ]
         },
         {
             "name": "相机",

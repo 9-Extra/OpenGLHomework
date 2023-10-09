@@ -29,6 +29,17 @@ public:
         assert(!parent.lock()); // 必须没有父节点
     };
 
+    void enable(){
+        if (!enabled){
+            enabled = true;
+            is_relat_dirty = true;// 重新计算变换矩阵
+        }
+    }
+
+    void disable(){
+        enabled = false;
+    }
+
     void add_component(std::unique_ptr<Component>&& component) {
         component->set_owner(this);
         components.push_back(std::move(component));
@@ -117,7 +128,12 @@ public:
     }
 
 private:
+    friend class World;
     std::vector<std::unique_ptr<Component>> components;
     std::weak_ptr<GObject> parent;
     std::vector<std::shared_ptr<GObject>> children;
+
+    bool enabled = true;
+
+    void tick(uint32_t dirty_flags);
 };

@@ -8,33 +8,6 @@
 
 World world; // global world instance
 
-// 递归更新物体
-void World::walk_gobject(GObject *root, uint32_t dirty_flags) {
-    dirty_flags |= root->is_relat_dirty;
-    if (dirty_flags) {
-        if (root->has_parent()) {
-            // 子节点的transform为父节点的transform叠加上自身的transform
-            root->relate_model_matrix =
-                root->get_parent().lock()->relate_model_matrix * root->transform.transform_matrix();
-            root->relate_normal_matrix =
-                root->get_parent().lock()->relate_normal_matrix * root->transform.normal_matrix();
-        } else {
-            root->relate_model_matrix = root->transform.transform_matrix();
-            root->relate_normal_matrix = root->transform.normal_matrix();
-        }
-        root->render_need_update = true;
-        root->is_relat_dirty = false;
-    }
-    // 更新组件
-    for(auto& c : root->get_components()) {
-        c->tick();
-    }
-
-    for (auto &child : root->get_children()) {
-        walk_gobject(child.get(), dirty_flags); // 更新子节点
-    }
-}
-
 void World::tick() {
     tick_count++;
 
@@ -46,9 +19,7 @@ void World::tick() {
         }
     }
     // 递归更新所有物体
-    walk_gobject(this->root.get(), 0);
-
-    renderer.main_camera = camera;
+    this->root->tick(0);
 
     //上传天空盒
     //renderer.set_skybox();
@@ -144,14 +115,5 @@ void load_scene_from_json(const std::string &path) {
     // 加载物体
     if (json.has("root")) {
         load_node_from_json(json["root"], world.get_root().get());
-    }
-    // 加载点光源
-    if (json.has("pointlights")) {
-        for (const SimpleJson::JsonObject &pointlight_desc : json["pointlights"].get_list()) {
-            PointLight &light = renderer.pointlights.emplace_back();
-            light.position = load_vec3(pointlight_desc["position"]);
-            light.color = load_vec3(pointlight_desc["color"]);
-            light.factor = (float)pointlight_desc["factor"].get_number();
-        }
     }
 }
