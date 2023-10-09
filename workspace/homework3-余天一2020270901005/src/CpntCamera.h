@@ -3,6 +3,7 @@
 #include "Renderer.h"
 #include "GObject.h"
 
+// 相机组件，可以设置为主相机，使相机跟随其owner object移动
 class CpntCamera: public Component{
 public:
     CpntCamera(float near_z = 1.0f, float far_z = 1000.0f, float fov = 1.57): near_z(near_z), far_z(far_z), fov(fov) {}

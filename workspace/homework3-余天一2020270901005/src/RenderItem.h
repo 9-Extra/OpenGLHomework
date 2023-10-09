@@ -6,6 +6,7 @@
 #include "CGmath.h"
 #include "RenderResource.h"
 
+// 一个可渲染面片的定义
 struct GameObjectPart {
     uint32_t mesh_id;
     uint32_t material_id;

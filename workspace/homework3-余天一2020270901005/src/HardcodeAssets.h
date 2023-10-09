@@ -4,6 +4,7 @@
 
 #include "RenderAspect.h"
 
+// 硬编码的一些数据
 namespace Assets {
 
 const std::vector<Vector3f> skybox_cube_vertices = {{-1.0, -1.0, -1.0}, {1.0, -1.0, -1.0}, {1.0, 1.0, -1.0},

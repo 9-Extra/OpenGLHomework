@@ -3,6 +3,7 @@
 #include "utils.h"
 #include "RenderItem.h"
 
+// Pass 基类
 class Pass{
 public:
     virtual void run() = 0;

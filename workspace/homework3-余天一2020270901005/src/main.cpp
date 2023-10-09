@@ -7,7 +7,6 @@
 #include <sstream>
 #include <vector>
 
-#include "CpntCamera.h"
 #include "winapi.h"
 #include "CGmath.h"
 #include "Sjson.h"

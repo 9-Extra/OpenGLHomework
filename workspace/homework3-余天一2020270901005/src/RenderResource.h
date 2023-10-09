@@ -63,7 +63,7 @@ struct Shader {
     unsigned int program_id;
 };
 
-// 资源管理器
+// 资源管理器，设计糟糕，待改进
 class RenderReousce final {
 public:
     template <class T> class ResourceContainer {

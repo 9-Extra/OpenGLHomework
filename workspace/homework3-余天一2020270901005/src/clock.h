@@ -2,6 +2,7 @@
 
 #include <chrono>
 
+// 用于计时，在每帧开始时update，这样在帧中可以使用get_delta获取时间间隔
 class Clock {
 private:
     std::chrono::time_point<std::chrono::steady_clock> now;

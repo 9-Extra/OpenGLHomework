@@ -9,6 +9,7 @@
 #include "Component.h"
 #include "RenderAspect.h"
 
+// 一个物体，单独的物体没有功能，也不可见，需要挂上组件来实现具体的功能
 class GObject final : public std::enable_shared_from_this<GObject> {
 public:
     std::string name;

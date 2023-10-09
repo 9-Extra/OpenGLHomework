@@ -3,6 +3,7 @@
 #include "Renderer.h"
 #include "GObject.h"
 
+// 光源组件
 class CpntPointLight: public Component{
 public:
     CpntPointLight(Vector3f color, float radius): color(color), radius(radius) {}

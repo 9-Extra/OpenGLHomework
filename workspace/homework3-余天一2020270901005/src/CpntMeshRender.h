@@ -4,6 +4,7 @@
 #include "GObject.h"
 #include "Renderer.h"
 
+// 渲染mesh的组件，可以渲染出物体
 class CpntMeshRender: public Component{
 public:
     virtual void tick() override {

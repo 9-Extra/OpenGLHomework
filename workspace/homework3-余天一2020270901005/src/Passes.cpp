@@ -102,6 +102,7 @@ void SkyBoxPass::run() {
     checkError();
 }
 
+// 拾取
 void PickupPass::run() {
     set_framebuffer_size(renderer.main_viewport.width, renderer.main_viewport.height);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer_pickup);
