@@ -7,6 +7,8 @@ class Pass{
 public:
     virtual void run() = 0;
     friend class Renderer;
+
+    virtual ~Pass() = default;
 };
 
 class LambertianPass : public Pass {

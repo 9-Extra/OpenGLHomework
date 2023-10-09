@@ -22,12 +22,16 @@
                     3.0
                 ]
             },
-            "parts": [
-                {
-                    "mesh": "wood_floor.Sphere",
-                    "material": "wood_floor.wood_floor_deck"
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood_floor.Sphere",
+                            "material": "wood_floor.wood_floor_deck"
+                        }
+                    ]
                 }
-            ],
+            },
             "children": [
                 {
                     "name": "子球",
@@ -48,12 +52,16 @@
                             3.0
                         ]
                     },
-                    "parts": [
-                        {
-                            "mesh": "wood_floor.Sphere",
-                            "material": "wood_floor.wood_floor_deck"
+                    "components": {
+                        "mesh_render": {
+                            "parts": [
+                                {
+                                    "mesh": "wood_floor.Sphere",
+                                    "material": "wood_floor.wood_floor_deck"
+                                }
+                            ]
                         }
-                    ]
+                    }
                 }
             ]
         },
@@ -66,12 +74,16 @@
                     0.0, 1.57, 0.0
                 ]
             },
-            "parts": [
-                {
-                    "mesh": "teapot.teapot",
-                    "material": "wood_floor.wood_floor_deck"
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "teapot.teapot",
+                            "material": "wood_floor.wood_floor_deck"
+                        }
+                    ]
                 }
-            ]
+            }
         },
         {
             "transform": {
@@ -85,12 +97,16 @@
                     40.0, 40.0, 1.0
                 ]
             },
-            "parts": [
-                {
-                    "mesh": "plane",
-                    "material": "stone.stone"
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "plane",
+                            "material": "stone.stone"
+                        }
+                    ]
                 }
-            ]
+            }
         },
         {
             "transform": {
@@ -101,24 +117,47 @@
                     2, 2, 2
                 ]
             },
-            "parts": [
-                {
-                    "mesh": "gold.\u7acb\u65b9\u4f53",
-                    "material": "gold.gold"
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "gold.\u7acb\u65b9\u4f53",
+                            "material": "gold.gold"
+                        }
+                    ]
                 }
-            ]
-        }
-    ],
-    "pointlights": [
-        {
-            "position": [0, 0, 0],
-            "color": [1, 1, 1],
-            "factor": 500
+            }
         },
         {
-            "position": [0, 5, -20],
-            "color": [1, 0.6, 0.6],
-            "factor": 1000
+            "name": "light1",
+            "transform": {"position": [0, 0, 0]},
+            "components":{
+                "point_light": {
+                    "color": [1, 1, 1],
+                    "factor": 500
+                }
+            }
+        },
+        {
+            "name": "light2",
+            "transform": {"position": [0, 5, -20]},
+            "components":{
+                "point_light": {
+                    "color": [1, 0.6, 0.6],
+                    "factor": 1000
+                }
+            }
+        },
+        {
+            "name": "相机",
+            "components": {
+                "camera": {
+                    "near_z": 1.0,
+                    "far_z": 1000,
+                    "fov": 1.57,
+                    "is_main": true
+                }
+            }
         }
     ]
 }

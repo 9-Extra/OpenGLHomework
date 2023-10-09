@@ -3,15 +3,11 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include "CGmath.h"
 #include "Component.h"
-#include "RenderItem.h"
-
-struct GObjectDesc {
-    Transform transform;
-    std::vector<GameObjectPart> parts;
-};
+#include "RenderAspect.h"
 
 class GObject final : public std::enable_shared_from_this<GObject> {
 public:
@@ -22,22 +18,16 @@ public:
     Matrix relate_normal_matrix;
     bool is_relat_dirty = true;
 
+    bool render_need_update;
+
     GObject(const std::string name = "") : name(name){};
-    GObject(GObjectDesc &&desc, const std::string name = "")
-        : name(name), transform(desc.transform), parts(std::move(desc.parts)){};
+    GObject(const Transform transform, const std::string name = "")
+        : name(name), transform(transform){};
 
     
     ~GObject() {
         assert(!parent.lock()); // 必须没有父节点
     };
-
-    void add_part(const GameObjectPart &part) {
-        GameObjectPart &p = parts.emplace_back(part);
-        p.base_transform = relate_model_matrix * p.model_matrix;
-        p.base_normal_matrix = transform.normal_matrix() * p.normal_matrix;
-    }
-
-    std::vector<GameObjectPart> &get_parts() { return parts; }
 
     void add_component(std::unique_ptr<Component>&& component) {
         component->set_owner(this);
@@ -46,28 +36,30 @@ public:
 
     Component* get_component(const std::type_info& t_info){
         for (auto &component : components) {
-            if (typeid(component) == t_info) {
+            auto& c = *component;// 比较其内容而非智能指针
+            if (typeid(c) == t_info) {
                 return component.get();
             }
         }
         return nullptr;
     }
 
-    template<class T, std::enable_if_t<std::is_base_of_v<T, Component>>>
+    template<class T, typename = std::enable_if_t<std::is_base_of_v<Component, T>>>
     T* get_component() {
         return (T*)get_component(typeid(T));
     }
 
     void remove_component(const std::type_info& t_info) {
         for (auto it = components.begin(); it!= components.end(); ++it) {
-            if (typeid(*it) == t_info) {
+            auto& c = **it;// 比较其内容而非智能指针
+            if (typeid(c) == t_info) {
                 components.erase(it);
                 break;
             }
         }
     }
 
-    template<class T, std::enable_if_t<std::is_base_of_v<T, Component>>>
+    template<class T, typename = std::enable_if_t<std::is_base_of_v<Component, T>>>
     void remove_component() {
         remove_component(typeid(T));
     }
@@ -125,7 +117,6 @@ public:
     }
 
 private:
-    std::vector<GameObjectPart> parts;
     std::vector<std::unique_ptr<Component>> components;
     std::weak_ptr<GObject> parent;
     std::vector<std::shared_ptr<GObject>> children;

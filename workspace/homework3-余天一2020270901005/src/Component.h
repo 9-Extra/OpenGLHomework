@@ -9,8 +9,10 @@ public:
     GObject* get_owner() const{
         return owner;
     }
+    virtual ~Component() = default;
 protected:
     friend class GObject;
+    friend class World;
     void set_owner(GObject* obj){
         assert(owner == nullptr);// 一个Component只能有一个owner
         owner = obj;

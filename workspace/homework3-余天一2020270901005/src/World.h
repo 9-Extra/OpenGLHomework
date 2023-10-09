@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "GObject.h"
 #include "clock.h"
 
@@ -36,7 +38,7 @@ public:
     uint64_t get_tick_count() { return tick_count; }
     std::shared_ptr<GObject> get_root() { return root; }
     void clear_objects() {
-        root = std::make_shared<GObject>(GObjectDesc{{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, {}}, "root");
+        root = std::make_shared<GObject>(Transform{{0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.0f}, {1.0f, 1.0f, 1.0f}}, "root");
     }
 
     void register_system(ISystem *system) {

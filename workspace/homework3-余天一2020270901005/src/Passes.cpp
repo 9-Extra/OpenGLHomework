@@ -35,21 +35,16 @@ void LambertianPass::run() {
     data->fog_density = renderer.fog_density;
     data->fog_min_distance = renderer.fog_min_distance;
     // 灯光参数
-    if (renderer.is_light_dirty) {
-        data->ambient_light = renderer.ambient_light;
-        if (renderer.pointlights.size() > POINTLIGNT_MAX) {
-            std::cout << "超出最大点光源数量" << std::endl;
-        }
-        uint32_t count = std::min<uint32_t>(renderer.pointlights.size(), POINTLIGNT_MAX);
-        for (uint32_t i = 0; i < count; ++i) {
-            data->pointlight_list[i].position = renderer.pointlights[i].position;
-            data->pointlight_list[i].intensity = renderer.pointlights[i].color * renderer.pointlights[i].factor;
-        }
-        data->pointlight_num = count;
-        renderer.is_light_dirty = false;
-
-        // std::cout << "Update light: count:" << count << std::endl;
+    data->ambient_light = renderer.ambient_light;
+    if (renderer.pointlights.size() > POINTLIGNT_MAX) {
+        std::cout << "超出最大点光源数量" << std::endl;
     }
+    uint32_t count = std::min<uint32_t>(renderer.pointlights.size(), POINTLIGNT_MAX);
+    for (uint32_t i = 0; i < count; ++i) {
+        data->pointlight_list[i].position = renderer.pointlights[i].position;
+        data->pointlight_list[i].intensity = renderer.pointlights[i].color * renderer.pointlights[i].factor;
+    }
+    data->pointlight_num = count;
     // 填充结束
     per_frame_uniform.unmap();
 

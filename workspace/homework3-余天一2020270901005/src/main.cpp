@@ -310,7 +310,10 @@ public:
         }
     }
 
-    void on_attach() override { ball = world.get_root()->get_child_by_name("球"); }
+    void on_attach() override {
+        ball = world.get_root()->get_child_by_name("球"); 
+        light = world.get_root()->get_child_by_name("light1");
+    }
 
     void tick() override {
         handle_keyboard(world.clock.get_delta());
@@ -319,12 +322,13 @@ public:
         ball->transform.rotation.x += world.clock.get_delta() * 0.001f;
         ball->transform.rotation.y += world.clock.get_delta() * 0.003f;
         ball->is_relat_dirty = true;
-        renderer.pointlights[0].position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
-        renderer.is_light_dirty = true;
+        light->transform.position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
+        light->is_relat_dirty = true;
     }
 
 private:
     std::shared_ptr<GObject> ball;
+    std::shared_ptr<GObject> light;
 };
 
 int main(int argc, char **argv) {
