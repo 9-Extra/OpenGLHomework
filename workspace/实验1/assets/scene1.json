@@ -1,0 +1,65 @@
+{
+    "root": [
+        {
+            "name": "left",
+            "transform": {
+                "position": [
+                    -1.5,
+                    1,
+                    -3
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "triangle",
+                            "material": "default"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "right",
+            "transform": {
+                "position": [
+                    1.5,
+                    1,
+                    -3
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "triangle",
+                            "material": "default"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "相机",
+            "components": {
+                "camera": {
+                    "near_z": 1.0,
+                    "far_z": 1000,
+                    "fov": 1.57,
+                    "is_main": true
+                }
+            }
+        }
+    ]
+}
