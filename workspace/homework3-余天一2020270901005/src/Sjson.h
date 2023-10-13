@@ -231,7 +231,7 @@ inline double parse_number(const char **const start) {
         }
     }
     // 解析指数
-    size_t given_exp = 0;
+    int given_exp = 0;
     int exp_sign = 1;
     if (**start == 'E' || **start == 'e') {
         (*start)++;

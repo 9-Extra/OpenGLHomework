@@ -68,6 +68,7 @@ Vector3f rgb2hsv(Vector3f rgb_color){
         hue = 0.0f;
     } else if (r > g && r > b){
         hue = 60.0f * fmod((g - b) / delta, 6);
+        if (hue < 0.0f) hue += 360.0f;
     } else if (g > r && g > b){
         hue = 60.0f * ((b - r) / delta + 2.0f);
     } else {
@@ -116,7 +117,7 @@ Vector3f hsv2rgb(Vector3f hsv_color){
 }
 
 int main(){
-    Vector3f color{0.4, 0.211111, 0.8};
+    Vector3f color{0.5f, 0.2f, 0.3f};
     Vector3f hsv = rgb2hsv(color);
     std::cout << "初始：" << color << std::endl;
     std::cout << "转化为HSV：" << hsv << std::endl;

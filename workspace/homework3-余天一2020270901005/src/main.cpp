@@ -343,6 +343,9 @@ private:
 };
 
 int main(int argc, char **argv) {
+
+    Vector3f r = {0.5f, 0.2f, 0.3f};
+    std::cout << rotation_matrix_to_eulerangles(Matrix::rotate(r)) << std::endl;
     // 初始化glut和创建窗口
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);

@@ -39,7 +39,7 @@ void LambertianPass::run() {
     if (renderer.pointlights.size() > POINTLIGNT_MAX) {
         std::cout << "超出最大点光源数量" << std::endl;
     }
-    uint32_t count = std::min<uint32_t>(renderer.pointlights.size(), POINTLIGNT_MAX);
+    uint32_t count = (uint32_t)std::min<size_t>(renderer.pointlights.size(), POINTLIGNT_MAX);
     for (uint32_t i = 0; i < count; ++i) {
         data->pointlight_list[i].position = renderer.pointlights[i].position;
         data->pointlight_list[i].intensity = renderer.pointlights[i].color * renderer.pointlights[i].factor;

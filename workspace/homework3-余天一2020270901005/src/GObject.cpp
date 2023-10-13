@@ -4,7 +4,7 @@ void GObject::tick(uint32_t dirty_flags) {
     if (!enabled)
         return; // 跳过不启用的物体
 
-    dirty_flags |= is_relat_dirty;
+    dirty_flags |= (uint32_t)is_relat_dirty;
     if (dirty_flags) {
         if (has_parent()) {
             // 子节点的transform为父节点的transform叠加上自身的transform

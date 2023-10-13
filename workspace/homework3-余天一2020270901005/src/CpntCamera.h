@@ -23,6 +23,8 @@ public:
             renderer.main_camera.far_z = far_z;
             renderer.main_camera.near_z = near_z;
             renderer.main_camera.fov = fov;
+
+            //Transform transform = Transform::from_matrix(owner.relate_model_matrix);
             renderer.main_camera.position = owner.transform.position;
             renderer.main_camera.rotation = owner.transform.rotation;
 

@@ -15,7 +15,11 @@ inline void _check_error(const std::string &file, size_t line) {
     }
 }
 
+#ifdef NDEBUG
+#define checkError()
+#else
 #define checkError() _check_error(__FILE__, __LINE__)
+#endif // !NDEBUG
 
 // 一个可写的uniform buffer对象的封装
 template <class T> struct WritableUniformBuffer {

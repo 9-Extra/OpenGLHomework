@@ -55,7 +55,7 @@ Transform load_transform(const SimpleJson::JsonObject &json) {
     return trans;
 }
 
-// 从json加载Conponents
+// 从json加载组件
 void load_conponents_from_json(GObject *obj, const SimpleJson::JsonObject &json) {
     for (const auto& [cpnt_name, cpnt_desc] :json.get_map()) {
         if (cpnt_name == "mesh_render") {

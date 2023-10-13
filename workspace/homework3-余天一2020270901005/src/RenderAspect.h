@@ -7,6 +7,14 @@ struct Transform {
     Vector3f rotation;
     Vector3f scale;
 
+    static Transform from_matrix(const Matrix& matrix){
+        Transform transform;
+        transform.position = Vector3f(matrix.m[0][3], matrix.m[1][3], matrix.m[2][3]);
+        transform.rotation = rotation_matrix_to_eulerangles(matrix);
+        transform.scale = Vector3f(1, 1, 1);
+        return transform;
+    }
+
     // 获取目视方向
     Vector3f get_orientation() const {
         float pitch = rotation[1];
@@ -29,7 +37,7 @@ public:
         rotation = {0.0f, 0.0f, 0.0f};
         near_z = 1.0f;
         far_z = 1000.0f;
-        fov = 1.57;
+        fov = 1.57f;
     }
 
     Vector3f position;

@@ -146,7 +146,7 @@ struct Matrix {
         return r;
     }
     // 沿z轴顺时针旋转roll，沿x轴顺时针旋转pitch，沿y轴顺时针旋转yaw
-    constexpr static Matrix rotate(float roll, float pitch, float yaw) {
+    static Matrix rotate(float roll, float pitch, float yaw) {
         float s_p = sin(pitch), c_p = cos(pitch);
         float s_r = sin(roll), c_r = cos(roll);
         float s_y = sin(yaw), c_y = cos(yaw);
@@ -168,7 +168,7 @@ struct Matrix {
                  1.0};
         return m;
     }
-    constexpr static Matrix rotate(Vector3f rotate) { return Matrix::rotate(rotate.x, rotate.y, rotate.z); }
+    static Matrix rotate(Vector3f rotate) { return Matrix::rotate(rotate.x, rotate.y, rotate.z); }
     constexpr static Matrix translate(float x, float y, float z) {
         Matrix m{
             1.0, 0.0, 0.0, x, 0.0, 1.0, 0.0, y, 0.0, 0.0, 1.0, z, 0.0, 0.0, 0.0, 1.0,
@@ -186,7 +186,7 @@ struct Matrix {
     constexpr static Matrix scale(Vector3f scale) { return Matrix::scale(scale.x, scale.y, scale.z); }
 };
 
-constexpr Matrix compute_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
+inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
     assert(near_z < far_z); // 不要写反了！！！！！！！！！！
     float SinFov = std::sin(fov * 0.5f);
     float CosFov = std::cos(fov * 0.5f);
@@ -219,14 +219,14 @@ struct Quaternion {
     static constexpr Quaternion no_rotate() { return Quaternion{0.0f, 0.0f, 0.0f, 1.0f}; }
 
     // 需要axis长度为1
-    static constexpr Quaternion from_rotation(Vector3f axis, float angle) {
+    Quaternion from_rotation(Vector3f axis, float angle) {
         angle = angle * 0.5f;
         float sin_theta = sinf(angle), cos_theta = cosf(angle);
         return Quaternion{sin_theta * axis.x, sin_theta * axis.y, sin_theta * axis.z, cos_theta};
     }
 
     // 按XYZ顺序顺时针，沿X旋转的角度，沿Y旋转的角度，沿Z旋转的角度
-    static constexpr Quaternion from_eular(Vector3f rotate) {
+    constexpr Quaternion from_eular(Vector3f rotate) {
         return Quaternion::from_rotation({1.0f, 0.0f, 0.0f}, rotate.x) *
                Quaternion::from_rotation({0.0f, 1.0f, 0.0f}, rotate.y) *
                Quaternion::from_rotation({0.0f, 0.0f, 1.0f}, rotate.z);
@@ -268,3 +268,23 @@ struct Quaternion {
         return Quaternion{v.x, v.y, v.z, w * r.w - qv.dot(rv)};
     }
 };
+
+inline Vector3f rotation_matrix_to_eulerangles(const Matrix &R)
+{
+    float sy = sqrt(R.m[0][0] * R.m[0][0] + R.m[1][0] * R.m[1][0]);
+    bool singular = sy < 1e-4;
+    float x, y, z;
+    if (!singular)
+    {
+        x = atan2( R.m[2][1], R.m[2][2]);
+        y = atan2(-R.m[2][0], sy);
+        z = atan2( R.m[1][0], R.m[0][0]);
+    }
+    else
+    {
+        x = atan2(-R.m[1][2], R.m[1][1]);
+        y = atan2(-R.m[2][0], sy);
+        z = 0;
+    }
+    return {x, -y, z};
+}
