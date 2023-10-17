@@ -23,13 +23,14 @@
     },
     "texture": {
         "default_normal": {
-            "is_normal": false,
             "image": "textures/normal.jpg"
         },
         "white": {
+            "is_color": true,
             "image": "textures/white.jpg"
         },
         "wood_diffusion": {
+            "is_color": true,
             "image": "materials/wood_flat/basecolor.jpg"
         }
     },

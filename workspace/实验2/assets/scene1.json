@@ -1,0 +1,348 @@
+{
+    "root": [
+        {
+            "transform": {
+                "position": [
+                    -10,
+                    8,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong0"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    -5,
+                    8,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong1"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    0,
+                    8,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong2"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    5,
+                    8,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong3"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    -10,
+                    3,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong4"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    -5,
+                    3,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong5"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    0,
+                    3,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong6"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    5,
+                    3,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong7"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    -10,
+                    -2,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong8"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    -5,
+                    -2,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong9"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    0,
+                    -2,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong10"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    5,
+                    -2,
+                    -10
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "wood.Sphere",
+                            "material": "phong11"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "lights",
+            "children": [
+                {
+                    "name": "light1",
+                    "transform": {
+                        "position": [
+                            0,
+                            0,
+                            0
+                        ]
+                    },
+                    "components": {
+                        "point_light": {
+                            "color": [
+                                1,
+                                1,
+                                1
+                            ],
+                            "factor": 100
+                        }
+                    }
+                },
+                {
+                    "name": "light2",
+                    "transform": {
+                        "position": [
+                            0,
+                            5,
+                            -20
+                        ]
+                    },
+                    "components": {
+                        "point_light": {
+                            "color": [
+                                1,
+                                0.6,
+                                0.6
+                            ],
+                            "factor": 100
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "相机",
+            "components": {
+                "camera": {
+                    "near_z": 1.0,
+                    "far_z": 1000,
+                    "fov": 1.57,
+                    "is_main": true
+                }
+            }
+        }
+    ]
+}

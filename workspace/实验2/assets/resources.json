@@ -1,0 +1,27 @@
+{
+    "shader": {
+        "single_color": {
+            "vs_path": "shaders/single_color/vs.vert",
+            "ps_path": "shaders/single_color/ps.frag"
+        },
+        "phong": {
+            "vs_path": "shaders/phong/vs.vert",
+            "ps_path": "shaders/phong/ps.frag"
+        }
+    },
+    "texture": {
+        "default_normal": {
+            "image": "textures/normal.jpg"
+        },
+        "white": {
+            "is_color": true,
+            "image": "textures/white.jpg"
+        }
+    },
+
+    "gltf": {
+        "wood": {
+            "path": "materials/wood_floor_deck/wood_floor_deck_1k.gltf"
+        }
+    }
+}

@@ -186,6 +186,30 @@ struct Matrix {
     constexpr static Matrix scale(Vector3f scale) { return Matrix::scale(scale.x, scale.y, scale.z); }
 };
 
+inline Matrix compute_orthogonal_matrix(float aspect, float size, float near_z, float far_z){
+    assert(near_z < far_z); // 不要写反了！！！！！！！！！！
+    float height = 2.0f / size;
+    float width = height / aspect;
+    return Matrix{
+        width,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        height,
+        0.0f,
+        0.0f,
+        0.0f,
+        0.0f,
+        -1.0f / (far_z - near_z),
+        -near_z,
+        0.0f,
+        0.0f,
+        0.0f,
+        1.0f
+    };
+}
+
 inline Matrix compute_perspective_matrix(float ratio, float fov, float near_z, float far_z) {
     assert(near_z < far_z); // 不要写反了！！！！！！！！！！
     float SinFov = std::sin(fov * 0.5f);
