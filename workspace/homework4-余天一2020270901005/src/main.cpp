@@ -21,7 +21,7 @@
 
 #define INIT_WINDOW_WIDTH 1080
 #define INIT_WINDOW_HEIGHT 720
-#define MY_TITLE "2020270901005 homework 3"
+#define MY_TITLE "2020270901005 homework 4"
 
 // Mingw的ifstream不知道为什么导致了崩溃，手动实现文件读取
 std::string read_whole_file(const std::string &path) {
@@ -197,7 +197,7 @@ void init_resource() {
 
 
 void init_start_scene() {
-    load_scene_from_json("../assets/scene1.json"); // 整个场景的所有物体都从json加载了
+    load_scene_from_json("../assets/scene2.json"); // 整个场景的所有物体都从json加载了
 }
 
 unsigned int calculate_fps(float delta_time) {
@@ -314,8 +314,8 @@ public:
     }
 
     void on_attach() override {
-        ball = world.get_root()->get_child_by_name("球"); 
-        assert(ball);
+        cube = world.get_root()->get_child_by_name("方块"); 
+        assert(cube);
         lights = world.get_root()->get_child_by_name("lights");
         assert(lights);
         light1 = world.get_root()->get_child_by_name("lights")->get_child_by_name("light1");
@@ -328,15 +328,15 @@ public:
         handle_keyboard(world.clock.get_delta());
         handle_mouse();
 
-        ball->transform.rotation.x += world.clock.get_delta() * 0.001f;
-        ball->transform.rotation.y += world.clock.get_delta() * 0.003f;
-        ball->is_relat_dirty = true;
+        cube->transform.rotation.x += world.clock.get_delta() * 0.001f;
+        cube->transform.rotation.y += world.clock.get_delta() * 0.003f;
+        cube->is_relat_dirty = true;
         light1->transform.position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
         light1->is_relat_dirty = true;
     }
 
 private:
-    std::shared_ptr<GObject> ball;
+    std::shared_ptr<GObject> cube;
     std::shared_ptr<GObject> lights;
     std::shared_ptr<GObject> light1;
     std::shared_ptr<GObject> camera;

@@ -58,6 +58,9 @@
         },
         "stone": {
             "path": "materials/stone/stone.gltf"
+        },
+        "crafting_table": {
+            "path": "materials/crafting_table/crafting_table.gltf"
         }
     }
 }

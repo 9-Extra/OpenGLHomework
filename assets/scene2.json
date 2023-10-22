@@ -1,0 +1,253 @@
+{
+    "skybox": {
+        "specular_texture": "skybox_valley_color"
+    },
+    "root": [
+        {
+            "name": "方块",
+            "transform": {
+                "position": [
+                    0,
+                    0,
+                    -10
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ],
+                "scale": [
+                    3,
+                    3,
+                    3
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "transform": {
+                                "position": [0, 0, 1],
+                                "rotation": [0, 0, 0]
+                            },
+                            "mesh": "plane",
+                            "material": "crafting_table.front"
+                        },
+                        {
+                            "transform": {
+                                "position": [0, 0, -1],
+                                "rotation": [0, 0, 3.1415]
+                            },
+                            "mesh": "plane",
+                            "material": "crafting_table.side"
+                        },
+                        {
+                            "transform": {
+                                "position": [0, 1, 0],
+                                "rotation": [0, -1.57, 0]
+                            },
+                            "mesh": "plane",
+                            "material": "crafting_table.top"
+                        },
+                        {
+                            "transform": {
+                                "position": [0, -1, 0],
+                                "rotation": [0, 1.57, 0]
+                            },
+                            "mesh": "plane",
+                            "material": "gold.gold"
+                        },
+                        {
+                            "transform": {
+                                "position": [1, 0, 0],
+                                "rotation": [0, 0, -1.57]
+                            },
+                            "mesh": "plane",
+                            "material": "crafting_table.side"
+                        },
+                        {
+                            "transform": {
+                                "position": [-1, 0, 0],
+                                "rotation": [0, 0, 1.57]
+                            },
+                            "mesh": "plane",
+                            "material": "crafting_table.side"
+                        }
+                    ]
+                    
+                }
+            },
+            "children": [
+                {
+                    "name": "子球",
+                    "transform": {
+                        "position": [
+                            0,
+                            10,
+                            -10
+                        ],
+                        "rotation": [
+                            0,
+                            0,
+                            0
+                        ],
+                        "scale": [
+                            3,
+                            3,
+                            3
+                        ]
+                    },
+                    "components": {
+                        "mesh_render": {
+                            "parts": [
+                                {
+                                    "mesh": "wood_floor.Sphere",
+                                    "material": "wood_floor.wood_floor_deck"
+                                }
+                            ]
+                        },
+                        "camera": {
+                            "near_z": 1.0,
+                            "far_z": 1000,
+                            "fov": 1.57,
+                            "is_main": false
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "transform": {
+                "position": [
+                    0,
+                    5,
+                    -10
+                ],
+                "rotation": [
+                    0,
+                    1.57,
+                    0
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "teapot.teapot",
+                            "material": "wood_floor.wood_floor_deck"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    0,
+                    -10,
+                    0
+                ],
+                "rotation": [
+                    0,
+                    -1.57,
+                    0
+                ],
+                "scale": [
+                    40,
+                    40,
+                    1
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "plane",
+                            "material": "stone.stone"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "transform": {
+                "position": [
+                    10,
+                    -5,
+                    -5
+                ],
+                "scale": [
+                    2,
+                    2,
+                    2
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        {
+                            "mesh": "gold.\u7acb\u65b9\u4f53",
+                            "material": "gold.gold"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "lights",
+            "children": [
+                {
+                    "name": "light1",
+                    "transform": {
+                        "position": [
+                            0,
+                            0,
+                            0
+                        ]
+                    },
+                    "components": {
+                        "point_light": {
+                            "color": [
+                                1,
+                                1,
+                                1
+                            ],
+                            "factor": 500
+                        }
+                    }
+                },
+                {
+                    "name": "light2",
+                    "transform": {
+                        "position": [
+                            0,
+                            5,
+                            -20
+                        ]
+                    },
+                    "components": {
+                        "point_light": {
+                            "color": [
+                                1,
+                                0.6,
+                                0.6
+                            ],
+                            "factor": 1000
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "相机",
+            "components": {
+                "camera": {
+                    "near_z": 1.0,
+                    "far_z": 1000,
+                    "fov": 1.57,
+                    "is_main": true
+                }
+            }
+        }
+    ]
+}
