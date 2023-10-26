@@ -7,16 +7,15 @@
 #include <sstream>
 #include <vector>
 
-#include "CGmath.h"
-#include "GObject.h"
-#include "HardcodeAssets.h"
-#include "RenderResource.h"
-#include "Renderer.h"
-#include "Sjson.h"
-#include "World.h"
-#include "utils.h"
 #include "winapi.h"
-
+#include "CGmath.h"
+#include "Sjson.h"
+#include "RenderResource.h"
+#include "utils.h"
+#include "GObject.h"
+#include "Renderer.h"
+#include "World.h"
+#include "HardcodeAssets.h"
 
 #include <FreeImage.h>
 
@@ -129,7 +128,7 @@ void setup_opengl() {
 
     glClearColor(0.0, 0.0, 0.0, 0.0);
     glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);    // 逆时针的面为正面
+    glFrontFace(GL_CCW); // 逆时针的面为正面
     glDepthFunc(GL_LEQUAL); // 在z = 1.0时，深度测试结果为true
 
     checkError();
@@ -139,11 +138,24 @@ void init_resource() {
     // 从json加载大部分的资源
     resources.load_json("../assets/resources.json");
     // 材质资源比较特殊，暂时通过硬编码加载
+
     {
         // 平滑着色材质
         Vector3f color_while{1.0f, 1.0f, 1.0f};
-        resources.add_material("wood_flat",
-                               MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "wood_diffusion"}}});
+        resources.add_material("ground_flat",
+                               MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "ground_color"}}});
+    }
+    {
+        // 平滑着色材质
+        Vector3f color_while{0.5f, 0.5f, 0.5f};
+        resources.add_material("stone_flat_dark",
+                               MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "stone.pbr_round_<UDIM>_4_S_albedo"}}});
+    }
+    {
+        // 平滑着色材质
+        Vector3f color_while{1.0f, 1.0f, 1.0f};
+        resources.add_material("stone_flat_light",
+                               MaterialDesc{"flat", {{2, sizeof(Vector3f), &color_while}}, {{3, "stone.pbr_round_<UDIM>_4_S_albedo"}}});
     }
 
     {
@@ -196,8 +208,9 @@ void init_resource() {
     }
 }
 
+
 void init_start_scene() {
-    load_scene_from_json("../assets/scene2.json"); // 整个场景的所有物体都从json加载了
+    load_scene_from_json("../assets/scene3.json"); // 整个场景的所有物体都从json加载了
 }
 
 unsigned int calculate_fps(float delta_time) {
@@ -248,7 +261,7 @@ public:
             auto [dx, dy] = input.get_mouse_move().v;
             // 鼠标向右拖拽，相机沿y轴顺时针旋转。鼠标向下拖拽时，相机沿x轴逆时针旋转
             const float rotate_speed = 0.003f;
-            Vector3f &rotation = camera->transform.rotation;
+            Vector3f& rotation = camera->transform.rotation;
             rotation.z += dx * rotate_speed;
             rotation.y -= dy * rotate_speed;
             camera->is_relat_dirty = true;
@@ -314,8 +327,6 @@ public:
     }
 
     void on_attach() override {
-        cube = world.get_root()->get_child_by_name("方块");
-        assert(cube);
         lights = world.get_root()->get_child_by_name("lights");
         assert(lights);
         light1 = world.get_root()->get_child_by_name("lights")->get_child_by_name("light1");
@@ -328,19 +339,41 @@ public:
         handle_keyboard(world.clock.get_delta());
         handle_mouse();
 
-        cube->transform.rotation.x += world.clock.get_delta() * 0.001f;
-        cube->transform.rotation.y += world.clock.get_delta() * 0.003f;
-        cube->is_relat_dirty = true;
         light1->transform.position.x = 20.0f * sinf(world.get_tick_count() * 0.01f);
         light1->is_relat_dirty = true;
     }
 
 private:
-    std::shared_ptr<GObject> cube;
     std::shared_ptr<GObject> lights;
     std::shared_ptr<GObject> light1;
     std::shared_ptr<GObject> camera;
 };
+
+GLint min_filiter = GL_LINEAR_MIPMAP_LINEAR;
+
+void menu_func(GLint selectedOption) // 菜单消息响应函数
+{
+    switch (selectedOption) {
+    case 1:
+        min_filiter = GL_NEAREST;
+        break;
+    case 2:
+        min_filiter = GL_LINEAR;
+        break;
+    case 3:
+        min_filiter = GL_NEAREST_MIPMAP_NEAREST;
+        break;
+    case 5:
+        min_filiter = GL_LINEAR_MIPMAP_NEAREST;
+        break;
+    case 6:
+        min_filiter = GL_LINEAR_MIPMAP_LINEAR;
+        break;
+    default:
+        break;
+    }
+}
+
 
 int main(int argc, char **argv) {
 
@@ -361,14 +394,25 @@ int main(int argc, char **argv) {
     glutMouseFunc(handle_mouse_click);
     glutMotionFunc(handle_mouse_move);
     glutPassiveMotionFunc(handle_mouse_move);
-    
+
+     // 菜单
+    glutCreateMenu(menu_func);                       // 创建菜单并绑定回调函数
+    glutAddMenuEntry("GL_NEAREST", 1);        
+    glutAddMenuEntry("GL_LINEAR", 2); 
+    glutAddMenuEntry("GL_NEAREST_MIPMAP_NEAREST", 3); 
+    glutAddMenuEntry("GL_LINEAR_MIPMAP_NEAREST", 4); 
+    glutAddMenuEntry("GL_NEAREST_MIPMAP_LINEAR", 5); 
+    glutAddMenuEntry("GL_LINEAR_MIPMAP_LINEAR", 6); 
+    glutAttachMenu(GLUT_RIGHT_BUTTON);               // 指定鼠标右键来弹出菜单项
+
+
     // 初始化opengl
     setup_opengl();
 
     // 初始化资源和加载资源
     init_resource();
 
-    // 初始化渲染相关pass等
+    //初始化渲染相关pass等
     renderer.init();
     renderer.set_viewport(0, 0, INIT_WINDOW_WIDTH, INIT_WINDOW_HEIGHT); // 初始化时也需要设置一下视口
 

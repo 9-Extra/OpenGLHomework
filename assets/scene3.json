@@ -1,0 +1,154 @@
+{
+    "skybox": {
+        "specular_texture": "skybox_valley_color"
+    },
+    "root": [
+        {
+            "name": "方块",
+            "transform": {
+                "position": [
+                    0,
+                    0,
+                    -10
+                ],
+                "rotation": [
+                    0,
+                    0,
+                    0
+                ],
+                "scale": [
+                    10,
+                    10,
+                    10
+                ]
+            },
+            "components": {
+                "mesh_render": {
+                    "parts": [
+                        
+                        {
+                            "transform": {
+                                "position": [
+                                    0,
+                                    1,
+                                    0
+                                ],
+                                "rotation": [
+                                    0,
+                                    -1.57079632675,
+                                    0
+                                ]
+                            },
+                            "mesh": "plane",
+                            "material": "stone_flat_light"
+                        },
+                        {
+                            "transform": {
+                                "position": [
+                                    0,
+                                    -1,
+                                    0
+                                ],
+                                "rotation": [
+                                    0,
+                                    1.57079632675,
+                                    0
+                                ]
+                            },
+                            "mesh": "plane",
+                            "material": "stone_flat_dark"
+                        },
+                        {
+                            "transform": {
+                                "position": [
+                                    1,
+                                    0,
+                                    0
+                                ],
+                                "rotation": [
+                                    1.57,
+                                    0,
+                                    -1.57079632675
+                                ]
+                            },
+                            "mesh": "plane",
+                            "material": "ground_flat"
+                        },
+                        {
+                            "transform": {
+                                "position": [
+                                    -1,
+                                    0,
+                                    0
+                                ],
+                                "rotation": [
+                                    -1.57,
+                                    0,
+                                    1.57079632675
+                                ]
+                            },
+                            "mesh": "plane",
+                            "material": "ground_flat"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "lights",
+            "children": [
+                {
+                    "name": "light1",
+                    "transform": {
+                        "position": [
+                            0,
+                            0,
+                            0
+                        ]
+                    },
+                    "components": {
+                        "point_light": {
+                            "color": [
+                                1,
+                                1,
+                                1
+                            ],
+                            "factor": 500
+                        }
+                    }
+                },
+                {
+                    "name": "light2",
+                    "transform": {
+                        "position": [
+                            0,
+                            5,
+                            -20
+                        ]
+                    },
+                    "components": {
+                        "point_light": {
+                            "color": [
+                                1,
+                                0.6,
+                                0.6
+                            ],
+                            "factor": 1000
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "相机",
+            "components": {
+                "camera": {
+                    "near_z": 1.0,
+                    "far_z": 1000,
+                    "fov": 1.57,
+                    "is_main": true
+                }
+            }
+        }
+    ]
+}

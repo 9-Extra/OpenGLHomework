@@ -100,7 +100,7 @@ private:
             t(); // 执行任务
 
             ReleaseSemaphore(pool.semaphore_task_available, 1, NULL);
-            if (is_empty) {
+            if (is_empty && pool.tasks.empty()) {
                 SetEvent(pool.task_complete_event);
             }
         }

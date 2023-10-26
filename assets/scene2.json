@@ -36,7 +36,7 @@
                         {
                             "transform": {
                                 "position": [0, 0, -1],
-                                "rotation": [0, 0, 3.1415]
+                                "rotation": [0, 0, 3.1415926535]
                             },
                             "mesh": "plane",
                             "material": "crafting_table.side"
@@ -44,7 +44,7 @@
                         {
                             "transform": {
                                 "position": [0, 1, 0],
-                                "rotation": [0, -1.57, 0]
+                                "rotation": [0, -1.57079632675, 0]
                             },
                             "mesh": "plane",
                             "material": "crafting_table.top"
@@ -52,7 +52,7 @@
                         {
                             "transform": {
                                 "position": [0, -1, 0],
-                                "rotation": [0, 1.57, 0]
+                                "rotation": [0, 1.57079632675, 0]
                             },
                             "mesh": "plane",
                             "material": "gold.gold"
@@ -60,7 +60,7 @@
                         {
                             "transform": {
                                 "position": [1, 0, 0],
-                                "rotation": [0, 0, -1.57]
+                                "rotation": [0, 0, -1.57079632675]
                             },
                             "mesh": "plane",
                             "material": "crafting_table.side"
@@ -68,7 +68,7 @@
                         {
                             "transform": {
                                 "position": [-1, 0, 0],
-                                "rotation": [0, 0, 1.57]
+                                "rotation": [0, 0, 1.57079632675]
                             },
                             "mesh": "plane",
                             "material": "crafting_table.side"

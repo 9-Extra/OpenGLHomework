@@ -32,6 +32,10 @@
         "wood_diffusion": {
             "is_color": true,
             "image": "materials/wood_flat/basecolor.jpg"
+        },
+        "ground_color": {
+            "is_color": true,
+            "image": "materials/ground/ground512.bmp"
         }
     },
 
