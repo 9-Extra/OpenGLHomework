@@ -2,6 +2,7 @@
 
 #include "glmath.h"
 #include <FreeImage.h>
+#include <string>
 
 FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path);
 

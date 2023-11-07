@@ -1,10 +1,10 @@
 #include "glmath.h"
 #include <GL/glew.h>
 #include <GL/glut.h>
-#include <memory>
-
-#include "Intersectable.h"
 #include "scene.h"
+
+#include <iostream>
+#include <vector>
 
 using namespace std;
 
@@ -15,7 +15,7 @@ class FullScreenTexturedQuad {
     unsigned int textureId = 0;
 
 public:
-    FullScreenTexturedQuad(uint32_t windowWidth, uint32_t windowHeight) {
+    FullScreenTexturedQuad(uint32_t, uint32_t) {
         // 启用二维纹理
         glEnable(GL_TEXTURE_2D);
         // 生成纹理标识符
@@ -127,12 +127,12 @@ void onReshape(int w, int h) {
 void onIdle() {
     // 视点旋转
     long time = glutGet(GLUT_ELAPSED_TIME);
-    scene.animate(0.003f * (time - time_last_frame));
+    scene.animate(0.001f * (time - time_last_frame));
 
     glutPostRedisplay();
 }
 
-void onKeyboard(unsigned char key, int pX, int pY) {
+void onKeyboard(unsigned char key, int , int) {
     if (key == '1')
         glutIdleFunc(onIdle);
     if (key == '2')

@@ -1,4 +1,5 @@
 #include "Material.h"
+#include <iostream>
 
 FIBITMAP *freeimage_load_and_convert_image(const std::string &image_path) {
     FIBITMAP *pImage_ori = FreeImage_Load(FreeImage_GetFileType(image_path.c_str(), 0), image_path.c_str());

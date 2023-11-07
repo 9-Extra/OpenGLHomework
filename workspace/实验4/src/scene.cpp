@@ -38,30 +38,9 @@ vec3 Scene::trace(Ray ray, int depth) {
     if (hit.s < 0) // 不再有交，则返回环境光即可
         return La;
 
-    // 针对粗糙材质，计算漫反射
+    // 针对粗糙材质，使用phong模型计算漫反射
     if (hit.material->type == ROUGH || hit.material->type == ROUGH_TEXTURE) {
-        // 初始化返回光线（或者阴影）
-        vec3 kd = hit.material->type == ROUGH ? hit.material->kd : sample_image(hit.material->texture, hit.uv);
-        vec3 outRadiance = kd * La;
-        for (auto &light : lights) {
-            vec3 light_vec = hit.position - light->position;
-            vec3 light_direction = normalize(light_vec);
-            Ray shadowRay(hit.position + hit.normal * epsilon, light_direction);
-            float cosTheta = dot(hit.normal, light_direction);
-            // 如果cos小于0（钝角），说明光照到的是物体背面，用户看不到
-            if (cosTheta > 0) {
-                // 如果与其他物体有交，则处于阴影中；反之按Phong模型计算
-                if (!shadowIntersect(shadowRay)) {
-                    outRadiance = outRadiance + light->Le * kd * cosTheta;
-                    vec3 halfway = normalize(-ray.dir + light_direction);
-                    float cosDelta = dot(hit.normal, halfway);
-                    if (cosDelta > 0)
-                        outRadiance =
-                            outRadiance + light->Le * hit.material->ks * powf(cosDelta, hit.material->shininess);
-                }
-            }
-        }
-        return outRadiance;
+        return phong_shading(-ray.dir, hit);
     }
 
     // 镜面反射（继续追踪）
@@ -78,10 +57,8 @@ vec3 Scene::trace(Ray ray, int depth) {
         float disc = 1 - (1 - cosa * cosa) / hit.material->ior / hit.material->ior;
         if (disc >= 0) {
             vec3 refractedDir = ray.dir / hit.material->ior + hit.normal * (cosa / hit.material->ior - sqrt(disc));
-
             // 递归调用trace()
-            outRadiance =
-                outRadiance + trace(Ray(hit.position - hit.normal * epsilon, refractedDir), depth + 1) * (one - F);
+            outRadiance += trace(Ray(hit.position - hit.normal * epsilon, refractedDir), depth + 1) * (one - F);
         }
     }
 
@@ -99,9 +76,11 @@ void Scene::build() {
     // 视点变换
     viewPoint.set(eye, lookat, vup, fov);
     // 环境光
-    La = vec3(0.2f, 0.2f, 0.2f);
-    vec3 Le(2, 2, 2); // 光照强度
-    lights.emplace_back(std::make_unique<Light>(vec3(-1, 0, -1), Le));
+    La = vec3(0.02f, 0.02f, 0.02f);
+    vec3 Le(0.3, 0.3, 0.3); // 光照强度
+    direction_lights.emplace_back(vec3(1, 2, 1), Le);
+
+    point_lights.emplace_back(vec3(1, 0, 1), vec3(1, 0, 0));
 
     // 镜面反射率
     vec3 ks(2, 2, 2);

@@ -2,12 +2,9 @@
 
 #define _USE_MATH_DEFINES // M_PI
 #include <array>
-#include <iostream>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
-#include <vector>
 
 using namespace std;
 
@@ -56,6 +53,7 @@ struct vec3 {
     vec3 operator*(float a) const { return vec3(x * a, y * a, z * a); }
     vec3 operator/(float a) const { return vec3(x / a, y / a, z / a); }
     vec3 operator+(const vec3 &v) const { return vec3(x + v.x, y + v.y, z + v.z); }
+    vec3 operator+=(const vec3 &v) { x += v.x;y += v.y;z += v.z; return *this; }
     vec3 operator-(const vec3 &v) const { return vec3(x - v.x, y - v.y, z - v.z); }
     vec3 operator*(const vec3 &v) const { return vec3(x * v.x, y * v.y, z * v.z); }
     vec3 operator-() const { return vec3(-x, -y, -z); }

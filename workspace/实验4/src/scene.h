@@ -3,19 +3,22 @@
 #include <GL/glut.h>	
 #include "Intersectable.h"
 
+#include <vector>
 #include <memory>
 #include "global.h"
 
 //---------------------------
 // 定义光源
-struct Light {
+struct DirectionalLight {
+    vec3 direction;			
+	vec3 Le;			// 光照强度
+	DirectionalLight(vec3 direction, vec3 _Le): direction(direction), Le(_Le) {}
+};
+
+struct PointLight {
     vec3 position;			
 	vec3 Le;			// 光照强度
-	Light(vec3 position, vec3 _Le)
-	{
-		this->position = position;
-		Le = _Le;
-	}
+	PointLight(vec3 position, vec3 _Le): position(position), Le(_Le) {}
 };
 
 //---------------------------
@@ -69,7 +72,8 @@ public:
 class Scene {
 	vector<std::unique_ptr<Intersectable>> objects; // 物品
 	// 光源
-	vector<std::unique_ptr<Light>> lights;
+	vector<DirectionalLight> direction_lights;
+    vector<PointLight> point_lights;
 	ViewPoint viewPoint;
 	vec3 La;		// 环境光
 public:
@@ -107,6 +111,57 @@ public:
 	}
 	// 光线追踪算法主体代码
     vec3 trace(Ray ray, int depth = 0);
+
+    vec3 phong_shading(vec3 V, const Hit& hit){
+        vec3 kd = hit.material->type == ROUGH ? hit.material->kd : sample_image(hit.material->texture, hit.uv);
+        
+        // 环境光
+        vec3 outRadiance = kd * La;
+
+        // 方向光
+        for (const auto &light : direction_lights) {
+            vec3 L = light.direction;
+            Ray shadowRay(hit.position + hit.normal * epsilon, L);
+            float cosTheta = dot(hit.normal, L);
+            // 如果cos小于0（钝角），说明光照到的是物体背面，用户看不到
+            if (cosTheta > 0) {
+                // 如果与其他物体有交，则处于阴影中；反之按Phong模型计算
+                if (!shadowIntersect(shadowRay)) {
+                    // 漫反射
+                    outRadiance += light.Le * kd * cosTheta;
+                    // 高光
+                    vec3 H = normalize(V + L);
+                    float cosDelta = dot(hit.normal, H);
+                    if (cosDelta > 0)
+                        outRadiance += light.Le * hit.material->ks * powf(cosDelta, hit.material->shininess);
+                }
+            }
+        }
+
+        // 点光源
+        for (const auto &light : point_lights) {
+            vec3 light_direction = light.position - hit.position;
+            vec3 L = normalize(light_direction);
+            Ray shadowRay(hit.position + hit.normal * epsilon, L);
+            float cosTheta = dot(hit.normal, L);
+            // 如果cos小于0（钝角），说明光照到的是物体背面，用户看不到
+            if (cosTheta > 0) {
+                // 如果与其他物体有交，则处于阴影中；反之按Phong模型计算
+                if (!shadowIntersect(shadowRay)) {
+                    // 漫反射
+                    float squared_distance = length(light_direction); // 使用线性光衰
+                    outRadiance += light.Le * kd * cosTheta / squared_distance;
+                    // 高光
+                    vec3 H = normalize(V + L);
+                    float cosDelta = dot(hit.normal, H);
+                    if (cosDelta > 0)
+                        outRadiance += light.Le * hit.material->ks * powf(cosDelta, hit.material->shininess) / squared_distance;
+                }
+            }
+        }
+        
+        return outRadiance;
+    }
 
     // 动画，相机绕场景旋转
 	void animate(float dt)
