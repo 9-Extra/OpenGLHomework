@@ -34,6 +34,7 @@ public:
     Intersectable(Material _material): material(_material) {}
 	// 虚函数，需要根据不同物品表面类型实现求交
 	virtual Hit intersect(const Ray& ray) = 0;		
+    virtual ~Intersectable(){}
 
 protected:
 	Material material;
